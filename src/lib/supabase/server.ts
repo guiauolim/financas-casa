@@ -1,11 +1,16 @@
 import "server-only";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { connection } from "next/server";
 import { publicEnv } from "@/lib/env";
 import type { Database } from "./database.types";
 
 // Cliente com a sessão do usuário (respeita RLS). Criar um por requisição.
 export async function createClient() {
+  // O auth-js compara a expiração do token com Date.now(). Com Cache Components
+  // + partialPrefetching, o Next pré-renderiza um App Shell em que cookies() já
+  // resolve mas Date.now() é proibido; connection() adia tudo para a requisição.
+  await connection();
   const cookieStore = await cookies();
   const env = publicEnv();
 
