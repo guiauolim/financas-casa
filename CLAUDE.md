@@ -8,7 +8,8 @@ Sistema de finanças pessoais para um casal (2 usuários, mesma "casa"/household
 > telefone ou dumps do banco. Tudo sensível vai em variáveis de ambiente (Vercel/Supabase).
 
 ## Stack
-- **Next.js (App Router) + TypeScript (strict)** — hospedado na **Vercel**
+- **Next.js 16 (App Router) + TypeScript (strict)** — hospedado na **Vercel**. Cache Components e
+  Partial Prefetching ligados (ver "Next.js 16 — armadilhas")
 - **Tailwind + shadcn/ui** para UI; **Recharts** para gráficos
 - **Supabase**: Postgres, Auth (magic link por e-mail), RLS obrigatório
 - **WhatsApp Cloud API (oficial da Meta)** — webhook em `/api/whatsapp/webhook`
@@ -23,6 +24,9 @@ Sistema de finanças pessoais para um casal (2 usuários, mesma "casa"/household
 src/
   app/
     (auth)/login/            # magic link
+    auth/confirm/route.ts    # destino dos links de e-mail (token_hash → verifyOtp)
+    auth/signout/route.ts
+    onboarding/              # 1º login: cria a casa ou aceita convite; /onboarding/convite
     (app)/dashboard/         # visão geral do mês
     (app)/transacoes/
     (app)/orcamentos/
@@ -33,14 +37,22 @@ src/
     api/cron/update-quotes/route.ts
   lib/
     supabase/{server,client,admin}.ts   # admin = service role, SÓ server-side
+    supabase/proxy.ts        # updateSession() usado por src/proxy.ts
+    supabase/database.types.ts           # gerado por `pnpm db:types` — não editar à mão
+    auth/{paths,session}.ts  # rotas públicas; getCurrentUser/getCurrentProfile
+    validation/*.ts          # schemas Zod dos formulários
     whatsapp/{send,verify-signature,types}.ts
     agent/{index,tools,prompts,model}.ts # orquestração LLM + tools (model.ts escolhe o provedor)
-    services/{transactions,budgets,investments,accounts}.ts # casos de uso: usados pelas
+    services/{households,transactions,budgets,investments,accounts}.ts # casos de uso: usados pelas
                                          # Server Actions do site E pelas tools do bot
     finance/{budget,billing,summary,insights}.ts # regras de negócio puras (testáveis)
     quotes/brapi.ts
     importers/b3-excel.ts
-supabase/migrations/
+  proxy.ts                   # Next 16: substitui o middleware.ts
+supabase/
+  migrations/                # 0001_init, 0002_onboarding
+  seed.sql                   # só dev local (`supabase db reset`); nunca vai para o remoto
+  templates/                 # e-mails do Auth (magic link, convite) em PT-BR
 docs/ROADMAP.md
 ```
 
@@ -50,6 +62,26 @@ docs/ROADMAP.md
 - Despesa no cartão de crédito pertence à **fatura** calculada por `closing_day` do cartão;
   relatórios de "gasto do mês" usam a data da compra, relatórios de "fatura" usam o ciclo.
 - Parcelado: criar N transações filhas com `installment_group_id`, `installment_number`, `installment_total`.
+
+## Next.js 16 — armadilhas
+- Esta versão difere do que costuma estar nos exemplos: ler o guia em `node_modules/next/dist/docs/`
+  antes de usar uma API nova (ver `AGENTS.md`).
+- `middleware.ts` virou **`src/proxy.ts`** (função `proxy`). Ele só renova a sessão e barra quem não
+  está logado; o guarda de "tem profile?" fica no `UserMenu` do layout `(app)`.
+- **Cache Components**: tudo que lê cookies/sessão fica dentro de `<Suspense>` (com skeleton).
+- `createClient()` de `lib/supabase/server.ts` chama `await connection()`: o auth-js usa `Date.now()`
+  e o App Shell do Partial Prefetching proíbe isso mesmo depois de `cookies()`. Não remover.
+- Não usar `"use cache: private"` em leituras de profile/sessão: cachearia "sem profile" logo após o onboarding.
+
+## Supabase — banco e Auth
+- Migrations novas em `supabase/migrations/NNNN_nome.sql`; aplicar com `pnpm supabase db push` e
+  depois `pnpm db:types`. Nunca editar uma migration já aplicada.
+- Usuário sem profile não passa na RLS: criar casa e aceitar convite são RPCs `security definer`
+  (`create_household`, `accept_household_invite`) que usam `auth.uid()` e o e-mail do JWT.
+  Convites ficam em `household_invites` — nunca confiar em `user_metadata` (o usuário pode alterá-lo).
+- Categorias padrão: fonte única em `seed_default_categories()` (migration 0002).
+- Templates de e-mail usam `{{ .SiteURL }}/auth/confirm?token_hash=...`; no remoto, configurar o
+  mesmo conteúdo em Authentication → Email Templates.
 
 ## WhatsApp — regras críticas
 1. `GET` do webhook: responder `hub.challenge` se `hub.verify_token === WHATSAPP_VERIFY_TOKEN`.
@@ -78,6 +110,8 @@ docs/ROADMAP.md
 - `.env.local` no `.gitignore`; manter `.env.example` sem valores.
 - `SUPABASE_SERVICE_ROLE_KEY` só em código server (`lib/supabase/admin.ts`), nunca com prefixo `NEXT_PUBLIC_`.
 - RLS ligado em TODAS as tabelas; acesso por `is_household_member(household_id)`.
+- O proxy **não** roda em `/api/*`: cada rota de API se autentica sozinha (webhook pela assinatura
+  `X-Hub-Signature-256`; crons por `Authorization: Bearer ${CRON_SECRET}`).
 - Rotas `/api/cron/*` exigem `Authorization: Bearer ${CRON_SECRET}`.
 - Não logar conteúdo de mensagens nem valores em logs da Vercel além do necessário.
 
@@ -143,4 +177,6 @@ Título de página 28px/700 com `tracking-tight`; título de card 17px/600; corp
 - Commits: Conventional Commits (`feat:`, `fix:`, `chore:`...). Uma fase do roadmap = um ou mais PRs.
 - Regras de negócio em `lib/finance/*` como funções puras com teste.
 - UI e mensagens do bot em PT-BR.
-- Antes de concluir uma tarefa: `pnpm lint && pnpm typecheck && pnpm test`.
+- Antes de concluir uma tarefa: `pnpm lint && pnpm typecheck && pnpm test` (o CI roda os mesmos + gitleaks).
+- pnpm via Corepack (versão em `packageManager`). Se `corepack enable` falhar por permissão:
+  `corepack enable --install-directory ~/.local/bin pnpm`.

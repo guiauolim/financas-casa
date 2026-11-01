@@ -16,7 +16,7 @@ plano antes de aprovar. Ao fim de cada fase: testar local, commit, push → Verc
 - [ ] Supabase: projeto em São Paulo; guardar URL, anon key e service role
 - [ ] Vercel: conta ligada ao GitHub (o import do projeto é no fim da Fase 1)
 
-## Fase 1 — Esqueleto, login, banco e primeiro deploy
+## Fase 1 — Esqueleto, login, banco e primeiro deploy ✅ concluída
 ```
 Leia o CLAUDE.md. Crie o projeto Next.js (App Router, TS strict, Tailwind, shadcn/ui,
 pnpm, ESLint, Vitest) seguindo a estrutura e o Guia visual. Configure os clientes
@@ -32,6 +32,14 @@ migration no Supabase remoto e para configurar o projeto na Vercel.
 Depois: importar o repo na Vercel, colar as variáveis, deploy, e adicionar a URL da
 Vercel em Supabase → Authentication → URL Configuration (Site URL + Redirect URLs).
 ✅ Pronto quando: você e sua esposa conseguem logar no site publicado e veem a mesma casa.
+
+**Entregue** (branch `feat/fase-1-esqueleto`):
+- Next.js 16 com `src/proxy.ts` no lugar do middleware (libera `/api/*`; cada rota de API se autentica sozinha)
+- Migration `0002_onboarding.sql`: categorias padrão, `create_household`, convites (`household_invites`),
+  `accept_household_invite`, policy de UPDATE em `households`, extensão `citext`
+- Login por magic link com `/auth/confirm` (token_hash), onboarding com convite por e-mail
+- Layout com menu lateral, páginas vazias com estado vazio e skeleton
+- CI: lint, typecheck, test e gitleaks; variável nova `NEXT_PUBLIC_SITE_URL`
 
 ## Fase 2 — Cadastros e transações
 ```
