@@ -1,5 +1,6 @@
 import "server-only";
 import { monthRange, type YearMonth } from "@/lib/finance/dates";
+import type { LedgerEntry } from "@/lib/finance/ledger";
 import { planInstallments } from "@/lib/finance/installments";
 import type { AccountKind } from "@/lib/validation/accounts";
 import type { TxType } from "@/lib/validation/categories";
@@ -132,6 +133,57 @@ async function withPurchaseTotals(db: Db, householdId: string, transactions: Tra
       ? { ...tx, installment: { ...tx.installment, purchaseTotalCents: totals.get(tx.installment.groupId) ?? null } }
       : tx,
   );
+}
+
+// Últimos lançamentos do mês (mais recentes primeiro), para a Visão geral.
+export async function listRecentTransactions(
+  db: Db,
+  { householdId, month, limit = 8 }: { householdId: string; month: YearMonth; limit?: number },
+): Promise<Transaction[]> {
+  const { from, to } = monthRange(month);
+  const { data, error } = await db
+    .from("transactions")
+    .select(SELECT)
+    .eq("household_id", householdId)
+    .is("deleted_at", null)
+    .gte("occurred_on", from)
+    .lte("occurred_on", to)
+    .order("occurred_on", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(limit)
+    .returns<Row[]>();
+  throwIf(error);
+  return withPurchaseTotals(db, householdId, (data ?? []).map(toTransaction));
+}
+
+const LEDGER_PAGE = 1000; // limite padrão de linhas por resposta do PostgREST
+
+// Todos os lançamentos não excluídos da casa em formato leve (sem joins), base de
+// saldos, faturas e orçamentos. Pagina para não ser cortado em 1000 linhas.
+export async function listLedger(db: Db, { householdId }: { householdId: string }): Promise<LedgerEntry[]> {
+  const entries: LedgerEntry[] = [];
+  for (let page = 0; ; page++) {
+    const { data, error } = await db
+      .from("transactions")
+      .select("id, type, amount_cents, occurred_on, account_id, transfer_account_id, category_id")
+      .eq("household_id", householdId)
+      .is("deleted_at", null)
+      .order("occurred_on")
+      .order("id")
+      .range(page * LEDGER_PAGE, (page + 1) * LEDGER_PAGE - 1);
+    throwIf(error);
+    for (const row of data ?? []) {
+      entries.push({
+        type: row.type,
+        amountCents: row.amount_cents,
+        occurredOn: row.occurred_on,
+        accountId: row.account_id,
+        transferAccountId: row.transfer_account_id,
+        categoryId: row.category_id,
+      });
+    }
+    if ((data?.length ?? 0) < LEDGER_PAGE) return entries;
+  }
 }
 
 export async function listDeletedTransactions(db: Db, { householdId }: { householdId: string }) {
