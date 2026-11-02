@@ -45,8 +45,13 @@ next-env.d.ts
 supabase/.temp/
 supabase/.branches/
 
-# planilhas (dados financeiros reais nunca entram no repo público);
-# exceção só para a fixture fictícia dos testes do importador da B3
+# planilhas, extratos e faturas (dados financeiros reais nunca entram no repo público);
+# exceção só para as fixtures FICTÍCIAS dos testes dos importadores
 *.xlsx
 *.xls
+*.csv
+*.ofx
+*.pdf
 !src/lib/importers/__fixtures__/b3-posicao-ficticia.xlsx
+!src/lib/importers/__fixtures__/itau-fatura-ficticia-*.xlsx
+!src/lib/importers/__fixtures__/itau-fatura-ficticia.xls
