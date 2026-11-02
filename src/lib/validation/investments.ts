@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { ASSET_CLASSES } from "@/lib/finance/portfolio";
+import { MAX_UPLOAD_BYTES as MAX_B3_FILE_BYTES } from "@/lib/importers/limits";
 import { aliases, amountCents, isoDate, optionalText, requiredName, uuid } from "./form";
 
-export const MAX_B3_FILE_BYTES = 4 * 1024 * 1024; // a Vercel corta corpo acima de 4,5 MB
+export { MAX_UPLOAD_BYTES as MAX_B3_FILE_BYTES } from "@/lib/importers/limits";
 
 const assetClass = z.enum(ASSET_CLASSES, { error: "Escolha a classe do ativo." });
 

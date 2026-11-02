@@ -16,7 +16,12 @@ export const categorySchema = z.object({
   type: z.enum(TX_TYPES, { error: "Escolha o tipo." }),
   icon: z.enum(CATEGORY_ICON_NAMES, { error: "Escolha um ícone." }),
   aliases,
-});
+  // Checkbox "Gasto da casa por padrão" (só despesas).
+  householdDefault: z
+    .string()
+    .optional()
+    .transform((v) => v === "on" || v === "1" || v === "true"),
+}).transform((value) => ({ ...value, householdDefault: value.type === "expense" && value.householdDefault }));
 
 export type CategoryInput = z.infer<typeof categorySchema>;
-export const CATEGORY_FORM_FIELDS = ["name", "type", "icon", "aliases"] as const;
+export const CATEGORY_FORM_FIELDS = ["name", "type", "icon", "aliases", "householdDefault"] as const;

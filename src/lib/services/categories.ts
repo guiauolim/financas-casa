@@ -10,9 +10,24 @@ export type Category = {
   icon: string | null;
   aliases: string[];
   archived: boolean;
+  householdDefault: boolean; // gasto vai para Casa por padrão
 };
 
-const COLUMNS = "id, name, type, icon, aliases, archived";
+const COLUMNS = "id, name, type, icon, aliases, archived, household_default";
+
+type Row = {
+  id: string;
+  name: string;
+  type: TxType;
+  icon: string | null;
+  aliases: string[];
+  archived: boolean;
+  household_default: boolean;
+};
+
+const toCategory = ({ household_default, ...row }: Row): Category => ({ ...row, householdDefault: household_default });
+
+const toRow = ({ householdDefault, ...input }: CategoryInput) => ({ ...input, household_default: householdDefault });
 
 export async function listCategories(
   db: Db,
@@ -22,7 +37,7 @@ export async function listCategories(
   if (!includeArchived) query = query.eq("archived", false);
   const { data, error } = await query.order("name");
   throwIf(error);
-  return (data ?? []).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  return (data ?? []).map(toCategory).sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
 }
 
 export async function getCategory(db: Db, { householdId, categoryId }: { householdId: string; categoryId: string }) {
@@ -33,7 +48,7 @@ export async function getCategory(db: Db, { householdId, categoryId }: { househo
     .eq("id", categoryId)
     .maybeSingle();
   throwIf(error);
-  return data;
+  return data ? toCategory(data) : null;
 }
 
 const DUPLICATE = "Já existe uma categoria com esse nome.";
@@ -41,7 +56,7 @@ const DUPLICATE = "Já existe uma categoria com esse nome.";
 export async function createCategory(db: Db, actor: Actor, input: CategoryInput): Promise<string> {
   const { data, error } = await db
     .from("categories")
-    .insert({ household_id: actor.householdId, ...input })
+    .insert({ household_id: actor.householdId, ...toRow(input) })
     .select("id")
     .single();
   if (isUniqueViolation(error)) throw new ServiceError(DUPLICATE, "name");
@@ -52,7 +67,7 @@ export async function createCategory(db: Db, actor: Actor, input: CategoryInput)
 export async function updateCategory(db: Db, actor: Actor, categoryId: string, input: CategoryInput): Promise<void> {
   const { data, error } = await db
     .from("categories")
-    .update(input)
+    .update(toRow(input))
     .eq("household_id", actor.householdId)
     .eq("id", categoryId)
     .select("id");

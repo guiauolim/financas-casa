@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { parseYearMonth } from "@/lib/finance/dates";
 import { MAX_INSTALLMENTS } from "@/lib/finance/installments";
+import { HOUSE } from "@/lib/finance/spent-by";
 import { amountCents, isoDate, optionalText, uuid } from "./form";
 
 const optionalUuid = z
@@ -8,6 +9,14 @@ const optionalUuid = z
   .optional()
   .transform((v) => (v?.trim() ? v : undefined))
   .pipe(uuid.optional());
+
+// De quem é: "casa" (Casa) ou o id do membro. Ausente = regra padrão (defaultSpentBy) no serviço.
+export const spentByField = z
+  .string()
+  .optional()
+  .transform((v) => (v?.trim() ? v.trim() : undefined))
+  .pipe(z.union([z.literal(HOUSE), uuid], { error: "Escolha de quem é o lançamento." }).optional())
+  .transform((v) => (v === undefined ? undefined : v === HOUSE ? null : v));
 
 const common = {
   amountCents: amountCents(),
@@ -32,8 +41,8 @@ export const transactionSchema = z
   .discriminatedUnion(
     "type",
     [
-      z.object({ ...common, type: z.literal("expense"), categoryId: optionalUuid, installments }),
-      z.object({ ...common, type: z.literal("income"), categoryId: optionalUuid }),
+      z.object({ ...common, type: z.literal("expense"), categoryId: optionalUuid, installments, spentBy: spentByField }),
+      z.object({ ...common, type: z.literal("income"), categoryId: optionalUuid, spentBy: spentByField }),
       z.object({
         ...common,
         type: z.literal("transfer"),
@@ -62,6 +71,7 @@ export const TRANSACTION_FORM_FIELDS = [
   "transferAccountId",
   "categoryId",
   "installments",
+  "spentBy",
 ] as const;
 
 export const scopeSchema = z.enum(["one", "following"]).catch("one");
@@ -75,7 +85,7 @@ export const transactionFiltersSchema = z.object({
     .transform((v) => (v && parseYearMonth(v) ? v : undefined)),
   conta: uuid.optional().catch(undefined),
   categoria: uuid.optional().catch(undefined),
-  pessoa: uuid.optional().catch(undefined),
+  pessoa: z.union([z.literal(HOUSE), uuid]).optional().catch(undefined),
 });
 
 export type TransactionFilters = z.infer<typeof transactionFiltersSchema>;

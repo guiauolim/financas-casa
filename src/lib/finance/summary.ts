@@ -45,3 +45,21 @@ export function expensesByCategory(
     .map(([categoryId, spentCents]) => ({ categoryId, spentCents }))
     .sort((a, b) => b.spentCents - a.spentCents);
 }
+
+// Despesas do mês por pessoa (spent_by; null = Casa). Sempre inclui Casa e cada membro
+// informado (com 0 se não gastou), na ordem: Casa, depois os membros.
+export function expensesByPerson(
+  entries: readonly LedgerEntry[],
+  month: YearMonth,
+  memberIds: readonly string[],
+): { spentBy: string | null; spentCents: number }[] {
+  const range = monthRange(month);
+  const totals = new Map<string | null, number>([[null, 0], ...memberIds.map((id) => [id, 0] as const)]);
+  for (const entry of entries) {
+    if (entry.type !== "expense" || !inRange(entry.occurredOn, range)) continue;
+    // Membro que saiu da casa (spent_by virou null) ou desconhecido conta como Casa.
+    const key = entry.spentBy && totals.has(entry.spentBy) ? entry.spentBy : null;
+    totals.set(key, (totals.get(key) ?? 0) + entry.amountCents);
+  }
+  return [...totals.entries()].map(([spentBy, spentCents]) => ({ spentBy, spentCents }));
+}

@@ -1,4 +1,4 @@
-import { Plus, Receipt, Trash2 } from "lucide-react";
+import { FileUp, Plus, Receipt, Trash2 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -13,6 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { requireActor } from "@/lib/auth/session";
 import { toYearMonth } from "@/lib/finance/dates";
+import { HOUSE } from "@/lib/finance/spent-by";
 import { summarize } from "@/lib/finance/summary";
 import { listAccounts } from "@/lib/services/accounts";
 import { listCategories } from "@/lib/services/categories";
@@ -34,6 +35,10 @@ export default function TransacoesPage({ searchParams }: PageProps<"/transacoes"
         description="Entradas, saídas e transferências."
         actions={
           <>
+            <Link href="/transacoes/importar" className={buttonVariants({ variant: "outline" })}>
+              <FileUp aria-hidden />
+              Importar fatura
+            </Link>
             <Link href="/transacoes/lixeira" className={buttonVariants({ variant: "outline" })}>
               <Trash2 aria-hidden />
               Lixeira
@@ -87,7 +92,7 @@ async function Transactions({ searchParams }: Pick<PageProps<"/transacoes">, "se
       month,
       accountId: filters.conta,
       categoryId: filters.categoria,
-      createdBy: filters.pessoa,
+      spentBy: filters.pessoa === HOUSE ? null : filters.pessoa,
     }),
     listAccounts(db, { householdId: actor.householdId, includeArchived: true }),
     listCategories(db, { householdId: actor.householdId, includeArchived: true }),
@@ -136,9 +141,10 @@ async function Transactions({ searchParams }: Pick<PageProps<"/transacoes">, "se
             </select>
           </div>
           <div className="flex flex-col gap-2">
-            <Label htmlFor="filtro-pessoa">Quem lançou</Label>
+            <Label htmlFor="filtro-pessoa">Pessoa</Label>
             <select id="filtro-pessoa" name="pessoa" defaultValue={filters.pessoa ?? ""} className={selectClassName}>
               <option value="">Todos</option>
+              <option value={HOUSE}>Casa</option>
               {members.map((m) => (
                 <option key={m.userId} value={m.userId}>
                   {m.displayName}

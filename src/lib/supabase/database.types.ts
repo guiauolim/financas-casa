@@ -190,10 +190,118 @@ export type Database = {
           },
         ]
       }
+      card_holders: {
+        Row: {
+          account_id: string
+          created_at: string
+          household_id: string
+          id: string
+          last_digits: string
+          user_id: string
+        }
+        Insert: {
+          account_id: string
+          created_at?: string
+          household_id: string
+          id?: string
+          last_digits: string
+          user_id: string
+        }
+        Update: {
+          account_id?: string
+          created_at?: string
+          household_id?: string
+          id?: string
+          last_digits?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_holders_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_holders_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_holders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      card_statement_imports: {
+        Row: {
+          account_id: string
+          created_count: number
+          due_date: string
+          duplicate_count: number
+          household_id: string
+          id: number
+          imported_at: string
+          imported_by: string | null
+          total_cents: number | null
+        }
+        Insert: {
+          account_id: string
+          created_count?: number
+          due_date: string
+          duplicate_count?: number
+          household_id: string
+          id?: never
+          imported_at?: string
+          imported_by?: string | null
+          total_cents?: number | null
+        }
+        Update: {
+          account_id?: string
+          created_count?: number
+          due_date?: string
+          duplicate_count?: number
+          household_id?: string
+          id?: never
+          imported_at?: string
+          imported_by?: string | null
+          total_cents?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "card_statement_imports_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_statement_imports_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "card_statement_imports_imported_by_fkey"
+            columns: ["imported_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           aliases: string[]
           archived: boolean
+          household_default: boolean
           household_id: string
           icon: string | null
           id: string
@@ -203,6 +311,7 @@ export type Database = {
         Insert: {
           aliases?: string[]
           archived?: boolean
+          household_default?: boolean
           household_id: string
           icon?: string | null
           id?: string
@@ -212,6 +321,7 @@ export type Database = {
         Update: {
           aliases?: string[]
           archived?: boolean
+          household_default?: boolean
           household_id?: string
           icon?: string | null
           id?: string
@@ -408,6 +518,58 @@ export type Database = {
           },
         ]
       }
+      merchant_rules: {
+        Row: {
+          category_id: string
+          created_at: string
+          created_by: string | null
+          household_id: string
+          id: string
+          pattern: string
+          updated_at: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          created_by?: string | null
+          household_id: string
+          id?: string
+          pattern: string
+          updated_at?: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          created_by?: string | null
+          household_id?: string
+          id?: string
+          pattern?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_rules_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "merchant_rules_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "merchant_rules_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string
@@ -444,6 +606,7 @@ export type Database = {
         Row: {
           account_id: string
           amount_cents: number
+          card_last_digits: string | null
           category_id: string | null
           created_at: string
           created_by: string | null
@@ -451,11 +614,13 @@ export type Database = {
           description: string | null
           household_id: string
           id: string
+          import_hash: string | null
           installment_group_id: string | null
           installment_number: number | null
           installment_total: number | null
           occurred_on: string
           source: Database["public"]["Enums"]["tx_source"]
+          spent_by: string | null
           transfer_account_id: string | null
           type: Database["public"]["Enums"]["tx_type"]
           updated_at: string
@@ -463,6 +628,7 @@ export type Database = {
         Insert: {
           account_id: string
           amount_cents: number
+          card_last_digits?: string | null
           category_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -470,11 +636,13 @@ export type Database = {
           description?: string | null
           household_id: string
           id?: string
+          import_hash?: string | null
           installment_group_id?: string | null
           installment_number?: number | null
           installment_total?: number | null
           occurred_on?: string
           source?: Database["public"]["Enums"]["tx_source"]
+          spent_by?: string | null
           transfer_account_id?: string | null
           type: Database["public"]["Enums"]["tx_type"]
           updated_at?: string
@@ -482,6 +650,7 @@ export type Database = {
         Update: {
           account_id?: string
           amount_cents?: number
+          card_last_digits?: string | null
           category_id?: string | null
           created_at?: string
           created_by?: string | null
@@ -489,11 +658,13 @@ export type Database = {
           description?: string | null
           household_id?: string
           id?: string
+          import_hash?: string | null
           installment_group_id?: string | null
           installment_number?: number | null
           installment_total?: number | null
           occurred_on?: string
           source?: Database["public"]["Enums"]["tx_source"]
+          spent_by?: string | null
           transfer_account_id?: string | null
           type?: Database["public"]["Enums"]["tx_type"]
           updated_at?: string
@@ -526,6 +697,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "households"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_spent_by_fkey"
+            columns: ["spent_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "transactions_transfer_account_id_fkey"
@@ -600,6 +778,17 @@ export type Database = {
           p_items: Json
           p_owner_user_id: string
           p_reference_date: string
+        }
+        Returns: Json
+      }
+      apply_card_import: {
+        Args: {
+          p_account_id: string
+          p_holders: Json
+          p_household_id: string
+          p_items: Json
+          p_rules: Json
+          p_statements: Json
         }
         Returns: Json
       }

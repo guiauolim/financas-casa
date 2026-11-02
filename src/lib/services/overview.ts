@@ -5,10 +5,11 @@ import { compareYM, monthRange, type YearMonth, yearMonthOf } from "@/lib/financ
 import { buildInsights, type Insight } from "@/lib/finance/insights";
 import { inRange } from "@/lib/finance/ledger";
 import { type NetWorthReport, netWorthForMonth } from "@/lib/finance/networth";
-import { expensesByCategory, type MonthTotals, monthlySeries, type Summary, summarize } from "@/lib/finance/summary";
+import { expensesByCategory, expensesByPerson, type MonthTotals, monthlySeries, type Summary, summarize } from "@/lib/finance/summary";
 import { type Account, listAccounts } from "./accounts";
 import { type BudgetStatusReport, type BudgetWithStatus, buildBudgetStatus, listBudgets } from "./budgets";
 import { listCategories } from "./categories";
+import { listMembers } from "./households";
 import { listInvestments, listSnapshots } from "./investments";
 import { netWorthInput } from "./networth";
 import { listLedger } from "./transactions";
@@ -37,6 +38,8 @@ export type MonthOverview = {
   netWorth: NetWorthReport;
   invoices: CardInvoiceSummary[];
   insights: Insight[];
+  // Despesas do mês por pessoa (spent_by): Casa (null) e cada membro, nessa ordem.
+  byPerson: { spentBy: string | null; name: string; memberIndex: number; spentCents: number }[];
 };
 
 // Junta os dados da Visão geral. Toda regra vem de lib/finance; aqui só se busca e combina.
@@ -44,13 +47,14 @@ export async function getMonthOverview(
   db: Db,
   { householdId, month, today }: { householdId: string; month: YearMonth; today: string },
 ): Promise<MonthOverview> {
-  const [ledger, budgetList, accounts, categoryList, investments, snapshots] = await Promise.all([
+  const [ledger, budgetList, accounts, categoryList, investments, snapshots, members] = await Promise.all([
     listLedger(db, { householdId }),
     listBudgets(db, { householdId }),
     listAccounts(db, { householdId, includeArchived: true }),
     listCategories(db, { householdId, includeArchived: true }),
     listInvestments(db, { householdId, includeArchived: true }),
     listSnapshots(db, { householdId }),
+    listMembers(db, { householdId }),
   ]);
 
   const isCurrentMonth = compareYM(month, yearMonthOf(today)) === 0;
@@ -128,5 +132,13 @@ export async function getMonthOverview(
     netWorth: netWorthForMonth(month, today, netWorthInput(accounts, ledger, investments, snapshots)),
     invoices,
     insights,
+    byPerson: expensesByPerson(
+      ledger,
+      month,
+      members.map((m) => m.userId),
+    ).map((p) => {
+      const index = members.findIndex((m) => m.userId === p.spentBy);
+      return { ...p, name: index < 0 ? "Casa" : members[index]!.displayName, memberIndex: index };
+    }),
   };
 }

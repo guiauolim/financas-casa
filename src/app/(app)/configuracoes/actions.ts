@@ -9,10 +9,12 @@ import { requireActor } from "@/lib/auth/session";
 import { createAccount, setAccountArchived, updateAccount } from "@/lib/services/accounts";
 import { createCategory, setCategoryArchived, updateCategory } from "@/lib/services/categories";
 import { cancelInvite, updateMember } from "@/lib/services/households";
+import { deleteMerchantRule, updateMerchantRule } from "@/lib/services/merchant-rules";
 import { createClient } from "@/lib/supabase/server";
 import { ACCOUNT_FORM_FIELDS, accountSchema } from "@/lib/validation/accounts";
 import { CATEGORY_FORM_FIELDS, categorySchema } from "@/lib/validation/categories";
 import { type FormState, formValues } from "@/lib/validation/form";
+import { MERCHANT_RULE_FIELDS, merchantRuleSchema } from "@/lib/validation/merchant-rules";
 import { memberSchema } from "@/lib/validation/members";
 
 const idSchema = z.object({ id: z.uuid() });
@@ -78,6 +80,35 @@ export async function archiveCategoryAction(formData: FormData): Promise<ActionR
   }
   refresh();
   return { success: parsed.data.archived ? "Categoria arquivada." : "Categoria reativada." };
+}
+
+// ───────────── Regras de categoria ─────────────
+
+export async function saveMerchantRuleAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireActor();
+  const id = z.uuid().safeParse(formData.get("id"));
+  if (!id.success) return { error: "Pedido inválido." };
+  const parsed = merchantRuleSchema.safeParse(formValues(formData, MERCHANT_RULE_FIELDS));
+  if (!parsed.success) return invalidState(parsed.error);
+  try {
+    await updateMerchantRule(await createClient(), actor, id.data, parsed.data);
+  } catch (error) {
+    return serviceErrorState(error, "Não foi possível salvar a regra. Tente novamente.");
+  }
+  redirect("/configuracoes/regras");
+}
+
+export async function deleteMerchantRuleAction(formData: FormData): Promise<ActionResult> {
+  const actor = await requireActor();
+  const parsed = idSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: "Pedido inválido." };
+  try {
+    await deleteMerchantRule(await createClient(), actor, parsed.data.id);
+  } catch (error) {
+    return serviceErrorState(error, "Não foi possível apagar a regra.");
+  }
+  refresh();
+  return { success: "Regra apagada." };
 }
 
 // ───────────── Membros e convites ─────────────

@@ -17,6 +17,7 @@ import { BudgetBar, BudgetText, ProjectionNote } from "@/components/budget-bar";
 import { CategoryIcon } from "@/components/category-icon";
 import { EmptyState } from "@/components/empty-state";
 import { Money } from "@/components/money";
+import { SpenderAvatar } from "@/components/member-avatar";
 import { MonthNav } from "@/components/month-nav";
 import { Panel } from "@/components/panel";
 import { buttonVariants } from "@/components/ui/button";
@@ -25,6 +26,7 @@ import { projectedCents } from "@/lib/finance/budget";
 import { formatBRL } from "@/lib/finance/money";
 import { daysBetween, formatDayMonth, formatMonthLong, toYearMonth } from "@/lib/finance/dates";
 import type { InsightTone } from "@/lib/finance/insights";
+import { HOUSE, spentByToParam } from "@/lib/finance/spent-by";
 import { cn } from "@/lib/utils";
 import { TransactionRows } from "../transacoes/transaction-rows";
 import { IncomeExpenseChart } from "./income-expense-chart";
@@ -279,7 +281,7 @@ export async function Insights(props: Props) {
   const mes = await mesOf(props);
   const { insights } = await loadOverview(mes);
   return (
-    <Panel title="Insights" description="Calculados a partir dos lançamentos e orçamentos." className="h-full">
+    <Panel title="Insights" description="Calculados a partir dos lançamentos e orçamentos." className="flex-1">
       {insights.length === 0 ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Lightbulb className="size-4 shrink-0" strokeWidth={2} aria-hidden />
@@ -381,6 +383,46 @@ export async function OpenInvoices(props: Props) {
               })}
             </li>
           ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+// ───────────────────────── Por pessoa ─────────────────────────
+
+export async function ByPerson(props: Props) {
+  const mes = await mesOf(props);
+  const { byPerson, month } = await loadOverview(mes);
+  const total = byPerson.reduce((sum, p) => sum + p.spentCents, 0);
+  const monthKey = toYearMonth(month);
+  return (
+    <Panel title="Por pessoa" description="Saídas do mês: da casa e de cada um.">
+      {total === 0 ? (
+        <p className="text-sm text-muted-foreground">Nenhuma saída neste mês.</p>
+      ) : (
+        <ul className="flex flex-col gap-1">
+          {byPerson.map((person) => {
+            const share = total > 0 ? Math.round((person.spentCents / total) * 100) : 0;
+            return (
+              <li key={person.spentBy ?? HOUSE}>
+                <Link
+                  href={`/transacoes?mes=${monthKey}&pessoa=${spentByToParam(person.spentBy)}`}
+                  className="-mx-2 flex min-h-11 flex-col gap-2 rounded-lg px-2 py-2 hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+                >
+                  <span className="flex items-center gap-3">
+                    <SpenderAvatar spentBy={person.spentBy} name={person.name} index={person.memberIndex} />
+                    <span className="flex-1 truncate text-sm font-medium">{person.name}</span>
+                    <span className="font-mono text-[13px] text-muted-foreground">{share}%</span>
+                    <Money cents={person.spentCents} className="text-sm font-medium" />
+                  </span>
+                  <span className="ml-10 h-1.5 overflow-hidden rounded-full bg-track" aria-hidden>
+                    <span className="block h-full rounded-full bg-primary" style={{ width: `${share}%` }} />
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
     </Panel>

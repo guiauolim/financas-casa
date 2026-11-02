@@ -2,7 +2,7 @@ import { ArrowLeftRight, CreditCard } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { CategoryIcon } from "@/components/category-icon";
-import { MemberAvatar } from "@/components/member-avatar";
+import { SpenderAvatar } from "@/components/member-avatar";
 import { Money } from "@/components/money";
 import { SourceBadge } from "@/components/source-badge";
 import { formatDayMonth } from "@/lib/finance/dates";
@@ -58,6 +58,14 @@ function InstallmentTag({ tx }: { tx: Transaction }) {
   );
 }
 
+// De quem é (Casa ou membro). Transferência não é de ninguém: mostra quem lançou, apagado.
+function Spender({ tx, memberIndex }: { tx: Transaction; memberIndex: (userId: string | null) => number }) {
+  if (tx.type === "transfer") {
+    return <span className="inline-flex size-7 items-center justify-center text-muted-foreground" aria-hidden>—</span>;
+  }
+  return <SpenderAvatar spentBy={tx.spentBy} name={tx.spentByName} index={memberIndex(tx.spentBy)} />;
+}
+
 // Tabela no desktop e lista compacta no celular. `href` null = linha sem link (lixeira).
 export function TransactionRows({
   transactions,
@@ -93,7 +101,7 @@ export function TransactionRows({
               <th scope="col" className="py-2 pr-3 font-medium">Categoria</th>
               <th scope="col" className="py-2 pr-3 font-medium">Conta</th>
               <th scope="col" className="py-2 pr-3 font-medium">Origem</th>
-              <th scope="col" className="py-2 pr-3 font-medium"><span className="sr-only">Quem lançou</span></th>
+              <th scope="col" className="py-2 pr-3 font-medium">De quem</th>
               <th scope="col" className="py-2 text-right font-medium">Valor</th>
               {actions ? <th scope="col" className="py-2 pl-3"><span className="sr-only">Ações</span></th> : null}
             </tr>
@@ -110,7 +118,7 @@ export function TransactionRows({
                 <td className="py-3 pr-3 text-muted-foreground">{accountText(tx)}</td>
                 <td className="py-3 pr-3"><SourceBadge source={tx.source} /></td>
                 <td className="py-3 pr-3">
-                  <MemberAvatar name={tx.createdByName} index={memberIndex(tx.createdBy)} size="sm" />
+                  <Spender tx={tx} memberIndex={memberIndex} />
                 </td>
                 <td className="py-3 text-right"><Money cents={tx.amountCents} kind={tx.type} /></td>
                 {actions ? <td className="py-3 pl-3 text-right">{actions(tx)}</td> : null}
@@ -123,7 +131,7 @@ export function TransactionRows({
       <ul className="flex flex-col divide-y divide-divider md:hidden">
         {transactions.map((tx) => (
           <li key={tx.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
-            <MemberAvatar name={tx.createdByName} index={memberIndex(tx.createdBy)} size="sm" />
+            <Spender tx={tx} memberIndex={memberIndex} />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <p className="truncate">
                 {label(tx)}

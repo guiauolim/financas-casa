@@ -8,6 +8,7 @@ import {
   CategorySpending,
   IncomeExpense,
   Insights,
+  ByPerson,
   Kpis,
   KpisSkeleton,
   MonthSelector,
@@ -48,8 +49,11 @@ export default function DashboardPage({ searchParams }: PageProps<"/dashboard">)
             <CategorySpending searchParams={searchParams} />
           </Suspense>
         </div>
-        <div className={narrow}>
-          <Suspense fallback={<PanelSkeleton rows={3} className="h-full" />}>
+        <div className={`${narrow} flex flex-col gap-4`}>
+          <Suspense fallback={<PanelSkeleton rows={3} />}>
+            <ByPerson searchParams={searchParams} />
+          </Suspense>
+          <Suspense fallback={<PanelSkeleton rows={3} className="flex-1" />}>
             <Insights searchParams={searchParams} />
           </Suspense>
         </div>

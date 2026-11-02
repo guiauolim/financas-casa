@@ -16,7 +16,14 @@ import type { FormState } from "@/lib/validation/form";
 import { cn } from "@/lib/utils";
 import { saveCategoryAction } from "../actions";
 
-export type CategoryFormValues = { id?: string; name: string; type: TxType; icon: string | null; aliases: string[] };
+export type CategoryFormValues = {
+  id?: string;
+  name: string;
+  type: TxType;
+  icon: string | null;
+  aliases: string[];
+  householdDefault?: boolean;
+};
 
 export function CategoryForm({ category }: { category?: CategoryFormValues }) {
   const [state, action, pending] = useActionState(saveCategoryAction, {} as FormState);
@@ -89,6 +96,23 @@ export function CategoryForm({ category }: { category?: CategoryFormValues }) {
         defaultValue={category?.aliases.join(", ")}
         error={errors.aliases}
       />
+      {type === "expense" ? (
+        <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-lg border border-border px-3 py-2.5">
+          <input
+            type="checkbox"
+            name="householdDefault"
+            defaultChecked={category?.householdDefault ?? false}
+            className="mt-0.5 size-5 shrink-0 accent-primary"
+          />
+          <span className="flex flex-col gap-0.5">
+            <span className="text-sm font-medium">Gasto da casa por padrão</span>
+            <span className="text-[13px] text-muted-foreground">
+              Lançamentos nesta categoria ficam como &quot;Casa&quot; (ex.: Mercado, Moradia). Dá para trocar em cada
+              lançamento.
+            </span>
+          </span>
+        </label>
+      ) : null}
       <FormError message={state.error} />
       <div className="flex flex-wrap gap-2">
         <Button type="submit" disabled={pending}>
