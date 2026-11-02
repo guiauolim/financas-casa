@@ -21,6 +21,7 @@ import { listTransactions } from "@/lib/services/transactions";
 import { createClient } from "@/lib/supabase/server";
 import { TX_TYPE_LABELS } from "@/lib/validation/categories";
 import { type TransactionFilters, transactionFiltersSchema } from "@/lib/validation/transactions";
+import { DeleteTransactionButton } from "./delete-transaction-button";
 import { TransactionRows } from "./transaction-rows";
 
 export const metadata: Metadata = { title: "Transações" };
@@ -189,7 +190,11 @@ async function Transactions({ searchParams }: Pick<PageProps<"/transacoes">, "se
           title="Lançamentos"
           description={`${transactions.length} ${transactions.length === 1 ? "lançamento" : "lançamentos"}`}
         >
-          <TransactionRows transactions={transactions} memberIndex={memberIndex} />
+          <TransactionRows
+            transactions={transactions}
+            memberIndex={memberIndex}
+            actions={(tx) => <DeleteTransactionButton tx={tx} compact />}
+          />
         </Panel>
       )}
     </>

@@ -45,6 +45,10 @@ export async function deleteTransactionAction(formData: FormData): Promise<Actio
   } catch (error) {
     return serviceErrorState(error, "Não foi possível excluir o lançamento.");
   }
+  if (formData.get("stay") === "1") {
+    refresh();
+    return { success: "Lançamento movido para a lixeira." };
+  }
   redirect(month ? `/transacoes?mes=${month}` : "/transacoes");
 }
 
