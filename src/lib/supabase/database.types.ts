@@ -249,6 +249,7 @@ export type Database = {
           id: number
           imported_at: string
           imported_by: string | null
+          paid: boolean
           total_cents: number | null
         }
         Insert: {
@@ -260,6 +261,7 @@ export type Database = {
           id?: never
           imported_at?: string
           imported_by?: string | null
+          paid?: boolean
           total_cents?: number | null
         }
         Update: {
@@ -271,6 +273,7 @@ export type Database = {
           id?: never
           imported_at?: string
           imported_by?: string | null
+          paid?: boolean
           total_cents?: number | null
         }
         Relationships: [

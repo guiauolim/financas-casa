@@ -68,6 +68,8 @@ export const cardImportApplySchema = cardImportPreviewSchema.extend({
         )
         .max(5000),
       rules: z.array(z.object({ pattern: z.string().trim().min(2).max(80), categoryId: uuid })).max(1000),
+      // Vencimentos ("YYYY-MM-DD") das faturas que já foram pagas fora do sistema.
+      paidDueDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(60).optional(),
     }),
   ),
 });

@@ -60,7 +60,7 @@ src/
     importers/__fixtures__/  # SÓ dados INVENTADOS: b3-posicao-ficticia.xlsx, itau-fatura-ficticia-*.xlsx/.xls
   proxy.ts                   # Next 16: substitui o middleware.ts
 supabase/
-  migrations/                # 0001_init … 0005_investimentos, 0006_import_fatura_pessoas
+  migrations/                # 0001_init … 0005_investimentos, 0006_import_fatura_pessoas, 0007_faturas_pagas
   seed.sql                   # só dev local (`supabase db reset`); nunca vai para o remoto
   templates/                 # e-mails do Auth (magic link, convite) em PT-BR
 scripts/make-{b3,itau}-fixture.mjs  # geram as fixtures fictícias dos importadores
@@ -99,6 +99,11 @@ docs/ROADMAP.md
   sem o valor — |ordinal de linhas idênticas), único por casa e incluindo a lixeira. Reimportar ou
   enviar faturas sobrepostas não duplica.
 - Conferência: soma das linhas (sem o pagamento) × total do arquivo, com a diferença na prévia.
+- Fatura já paga (arquivo "Fatura Paga" ou, sem título, já vencida; ajustável na prévia) grava
+  `card_statement_imports.paid`: depois do vencimento ela fica quitada (`settledReferences` em
+  `balances.ts`) e não entra em "faturas em aberto" nem abate o patrimônio — o pagamento real não
+  precisa ser lançado. Pagamentos lançados para ela são absorvidos (não viram crédito).
+- A entrada da importação fica em Novo lançamento (botão "Importar fatura").
 - Classificação (`lib/finance/categorize.ts`): regras aprendidas (`merchant_rules`, "lembrar para
   próximas" na prévia, editáveis em Configurações → Regras) > palavras-chave padrão > apelidos > "Outros".
 - Confirmar grava tudo numa transação (RPC `apply_card_import`, security invoker, `source='import'`).
@@ -108,7 +113,8 @@ docs/ROADMAP.md
   comércios, nomes ou finais de cartão de arquivos reais — só exemplos inventados.
 
 ## Investimentos e patrimônio
-- **Patrimônio** = saldo das contas + investimentos ativos − faturas em aberto (`lib/finance/networth.ts`,
+- **Patrimônio** = saldo das contas + investimentos ativos − faturas em aberto (faturas pagas fora do
+  sistema não contam; ver importação de faturas) (`lib/finance/networth.ts`,
   reaproveita `balances.ts`). Investimento usa sempre o valor **bruto**; o líquido da B3 (`net_value_cents`)
   é só informação no detalhe do ativo e nunca entra em totais.
 - Histórico em `investment_snapshots` (um valor por ativo por data). Valor numa data = último snapshot

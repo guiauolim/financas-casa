@@ -47,7 +47,9 @@ export type CardInvoices = {
   creditCents: number; // pago a mais (sobra depois de quitar tudo)
 };
 
-export type CardAccount = CardCycle & { id: string };
+// settledReferences: faturas ("YYYY-MM" do vencimento) que se sabe que já foram pagas fora do
+// sistema — ex.: importadas de um arquivo "Fatura Paga", cujo pagamento não foi lançado.
+export type CardAccount = CardCycle & { id: string; settledReferences?: ReadonlySet<string> };
 
 // Compras (despesa no cartão) caem na fatura pela data da compra (billing.ts). Estorno
 // (receita no cartão) abate a fatura do seu ciclo. Transferência que sai do cartão
@@ -87,6 +89,12 @@ export function cardInvoices(card: CardAccount, entries: readonly LedgerEntry[],
     invoice.paidCents = Math.min(due, pool);
     invoice.remainingCents = due - invoice.paidCents;
     pool -= invoice.paidCents;
+    // Paga fora do sistema (depois do vencimento): quitada. Absorve primeiro os pagamentos
+    // lançados (se houver), para não virarem crédito na fatura aberta.
+    if (card.settledReferences?.has(invoice.reference) && invoice.dueDate <= today) {
+      invoice.paidCents = due;
+      invoice.remainingCents = 0;
+    }
   }
 
   return {

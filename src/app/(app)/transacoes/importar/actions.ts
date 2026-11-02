@@ -2,6 +2,7 @@
 
 import { invalidState, serviceErrorState } from "@/lib/actions";
 import { requireActor } from "@/lib/auth/session";
+import { todayInSaoPaulo } from "@/lib/finance/dates";
 import { applyCardImport, type CardImportPreview, previewCardImport } from "@/lib/services/card-import";
 import { createClient } from "@/lib/supabase/server";
 import { cardImportApplySchema, cardImportPreviewSchema } from "@/lib/validation/card-import";
@@ -29,7 +30,8 @@ export async function previewCardImportAction(formData: FormData): Promise<CardP
   if (!parsed.success) return invalidState(parsed.error);
   try {
     const { files, ...request } = parsed.data;
-    const preview = await previewCardImport(await createClient(), actor, { ...request, files: await toFiles(files) });
+    const db = await createClient(); // faz `await connection()` antes do Date.now()
+    const preview = await previewCardImport(db, actor, { ...request, today: todayInSaoPaulo(), files: await toFiles(files) });
     return { preview };
   } catch (error) {
     return serviceErrorState(error, "Não foi possível ler as faturas. Tente novamente.");
@@ -47,8 +49,10 @@ export async function applyCardImportAction(formData: FormData): Promise<CardApp
   if (!parsed.success) return invalidState(parsed.error);
   try {
     const { files, decisions, ...request } = parsed.data;
-    const result = await applyCardImport(await createClient(), actor, {
+    const db = await createClient();
+    const result = await applyCardImport(db, actor, {
       ...request,
+      today: todayInSaoPaulo(),
       files: await toFiles(files),
       decisions: decisions ?? { overrides: [], rules: [] },
     });

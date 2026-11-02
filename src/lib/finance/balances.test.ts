@@ -112,3 +112,40 @@ describe("cardInvoices", () => {
     expect(result.open).toMatchObject({ closingDate: "2026-02-28", dueDate: "2026-03-05" });
   });
 });
+
+describe("cardInvoices com faturas pagas fora do sistema", () => {
+  // Fecha dia 3, vence dia 10. Compras importadas de faturas já pagas, sem o pagamento lançado.
+  const card = { id: CARD, closingDay: 3, dueDay: 10 };
+  const entries = [
+    entry("expense", "2026-08-20", 40000, CARD), // fatura 2026-09
+    entry("expense", "2026-09-20", 30000, CARD), // fatura 2026-10
+    entry("expense", "2026-10-20", 5000, CARD), // fatura 2026-11 (aberta em 2026-10-25)
+  ];
+
+  it("sem a marcação, tudo aparece como devido", () => {
+    const result = cardInvoices(card, entries, "2026-10-25");
+    expect(result.closedUnpaid.map((i) => i.reference)).toEqual(["2026-09", "2026-10"]);
+  });
+
+  it("faturas marcadas como pagas não ficam em aberto (depois do vencimento)", () => {
+    const settled = { ...card, settledReferences: new Set(["2026-09", "2026-10"]) };
+    const result = cardInvoices(settled, entries, "2026-10-25");
+    expect(result.closedUnpaid).toEqual([]);
+    expect(result.open).toMatchObject({ reference: "2026-11", remainingCents: 5000 });
+    expect(result.creditCents).toBe(0);
+  });
+
+  it("antes do vencimento a dívida ainda existia", () => {
+    const settled = { ...card, settledReferences: new Set(["2026-10"]) };
+    const result = cardInvoices(settled, entries, "2026-10-05");
+    expect(result.closedUnpaid.find((i) => i.reference === "2026-10")?.remainingCents).toBe(30000);
+  });
+
+  it("pagamento lançado de fatura marcada não vira crédito na aberta", () => {
+    const settled = { ...card, settledReferences: new Set(["2026-09", "2026-10"]) };
+    const withPayment = [...entries, entry("transfer", "2026-09-10", 40000, BANK, CARD)];
+    const result = cardInvoices(settled, withPayment, "2026-10-25");
+    expect(result.creditCents).toBe(0);
+    expect(result.open.remainingCents).toBe(5000);
+  });
+});

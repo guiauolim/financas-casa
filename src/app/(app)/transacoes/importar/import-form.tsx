@@ -66,6 +66,7 @@ export function CardImportForm({
   const [filter, setFilter] = useState<Filter>("all");
   const [bulkCategory, setBulkCategory] = useState<string | null>(null);
   const [bulkSpentBy, setBulkSpentBy] = useState("");
+  const [paidDueDates, setPaidDueDates] = useState<Set<string>>(new Set());
   const [state, setState] = useState<FormState>({});
   const [pending, startTransition] = useTransition();
   const errors = state.fieldErrors ?? {};
@@ -140,6 +141,7 @@ export function CardImportForm({
     setEdits({}); // de quem padrão depende do dono de cada final
     runPreview(holders, (next) => {
       loadPreview(next);
+      setPaidDueDates(new Set(next.statements.filter((s) => s.paidDetected).map((s) => s.dueDate)));
       setStep("review");
     });
   };
@@ -229,7 +231,11 @@ export function CardImportForm({
     formData.set("includeFuture", includeFuture ? "1" : "0");
     formData.set(
       "decisions",
-      JSON.stringify({ overrides, rules: [...rules].map(([pattern, categoryId]) => ({ pattern, categoryId })) }),
+      JSON.stringify({
+        overrides,
+        rules: [...rules].map(([pattern, categoryId]) => ({ pattern, categoryId })),
+        paidDueDates: [...paidDueDates],
+      }),
     );
     startTransition(async () => {
       const result = await applyCardImportAction(formData);
@@ -283,7 +289,7 @@ export function CardImportForm({
               <FileUp aria-hidden />
               {pending ? "Lendo…" : "Continuar"}
             </Button>
-            <Link href="/transacoes" className={buttonVariants({ variant: "outline" })}>
+            <Link href="/transacoes/nova" className={buttonVariants({ variant: "outline" })}>
               Cancelar
             </Link>
           </div>
@@ -390,6 +396,25 @@ export function CardImportForm({
             <p className="text-[13px] text-muted-foreground">
               {s.counts.new} novo(s) · {s.counts.duplicate} duplicado(s) · {s.counts.ignored} ignorado(s)
             </p>
+            <label className="flex min-h-11 cursor-pointer items-start gap-2 text-[13px]">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-5 shrink-0 accent-primary"
+                checked={paidDueDates.has(s.dueDate)}
+                onChange={(e) => {
+                  const next = new Set(paidDueDates);
+                  if (e.target.checked) next.add(s.dueDate);
+                  else next.delete(s.dueDate);
+                  setPaidDueDates(next);
+                }}
+              />
+              <span>
+                <span className="font-medium">Já foi paga</span>
+                <span className="block text-muted-foreground">
+                  Não entra em &quot;faturas em aberto&quot; nem abate o patrimônio (o pagamento não precisa ser lançado).
+                </span>
+              </span>
+            </label>
             {s.otherInvoiceCount > 0 ? (
               <p className="flex gap-1.5 rounded-lg bg-[#FBEBD9] px-3 py-2 text-[13px] text-warning-foreground">
                 <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
