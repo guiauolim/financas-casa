@@ -1,4 +1,4 @@
-import { CreditCard } from "lucide-react";
+import { CreditCard, FileUp } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -17,7 +17,16 @@ export const metadata: Metadata = { title: "Novo lançamento" };
 export default function NovaTransacaoPage() {
   return (
     <>
-      <PageHeader title="Novo lançamento" description="Despesa, receita ou transferência entre contas." />
+      <PageHeader
+        title="Novo lançamento"
+        description="Despesa, receita ou transferência entre contas — ou importe a fatura do cartão."
+        actions={
+          <Link href="/transacoes/importar" className={buttonVariants({ variant: "outline" })}>
+            <FileUp aria-hidden />
+            Importar fatura
+          </Link>
+        }
+      />
       <Suspense fallback={<FormSkeleton fields={6} />}>
         <NewTransaction />
       </Suspense>

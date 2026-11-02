@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import * as XLSX from "xlsx";
 import { describe, expect, it } from "vitest";
 import { CardImportError, classifyLine, parseCardStatement, parseInstallment } from ".";
-import { keyDescription, type PlanCategory, type PlanInput, planCardImport, suggestHolders, uuidFromKey } from "./plan";
+import { isPaidStatement, keyDescription, type PlanCategory, type PlanInput, planCardImport, suggestHolders, uuidFromKey } from "./plan";
 
 // Fixtures FICTÍCIAS (scripts/make-itau-fixture.mjs): nomes, finais e comércios inventados.
 const fixture = (name: string) => readFileSync(new URL(`../__fixtures__/${name}`, import.meta.url));
@@ -355,5 +355,19 @@ describe("suggestHolders", () => {
   it("ignora dono salvo que não é mais da casa", () => {
     const result = suggestHolders(finals, members, new Map([["2222", "fora-da-casa"]]));
     expect(result.get("2222")).toBe(BRUNO);
+  });
+});
+
+describe("isPaidStatement", () => {
+  it("título do arquivo manda; sem pista, vencimento passado", () => {
+    expect(isPaidStatement({ title: "Fatura Paga - Março/2026", dueDate: "2026-03-10" })).toBe(true);
+    expect(isPaidStatement({ title: "Fatura Aberta - Março/2026", dueDate: "2026-03-10" }, "2026-05-01")).toBe(false);
+    expect(isPaidStatement({ title: "Fatura fechada", dueDate: "2026-03-10" }, "2026-05-01")).toBe(false);
+    expect(isPaidStatement({ title: null, dueDate: "2026-03-10" }, "2026-05-01")).toBe(true);
+    expect(isPaidStatement({ title: null, dueDate: "2026-03-10" }, "2026-03-01")).toBe(false);
+  });
+
+  it("vem na prévia de cada fatura", () => {
+    expect(planCardImport(input()).statements[0]!.paidDetected).toBe(true);
   });
 });

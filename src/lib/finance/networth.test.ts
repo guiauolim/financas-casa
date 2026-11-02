@@ -81,3 +81,21 @@ describe("netWorthForMonth", () => {
     expect(report.previousAsOf).toBe("2026-09-30");
   });
 });
+
+describe("faturas pagas fora do sistema", () => {
+  it("não abatem o patrimônio depois do vencimento", () => {
+    // Histórico importado: compras de faturas já pagas, sem o pagamento lançado.
+    const imported: NetWorthInput = {
+      ...input,
+      ledger: [entry("expense", "2026-09-10", 800000, "card"), entry("expense", "2026-10-01", 900000, "card")],
+    };
+    const settled: NetWorthInput = {
+      ...imported,
+      cards: [{ ...card, settledReferences: new Set(["2026-09", "2026-10"]) }],
+    };
+    expect(netWorthAt("2026-10-20", imported).invoicesCents).toBe(1700000);
+    const result = netWorthAt("2026-10-20", settled);
+    expect(result.invoicesCents).toBe(0);
+    expect(result.totalCents).toBe(result.accountsCents + result.investmentsCents);
+  });
+});

@@ -8,6 +8,7 @@ import { type NetWorthReport, netWorthForMonth } from "@/lib/finance/networth";
 import { expensesByCategory, expensesByPerson, type MonthTotals, monthlySeries, type Summary, summarize } from "@/lib/finance/summary";
 import { type Account, listAccounts } from "./accounts";
 import { type BudgetStatusReport, type BudgetWithStatus, buildBudgetStatus, listBudgets } from "./budgets";
+import { listSettledInvoices } from "./card-invoices";
 import { listCategories } from "./categories";
 import { listMembers } from "./households";
 import { listInvestments, listSnapshots } from "./investments";
@@ -47,7 +48,7 @@ export async function getMonthOverview(
   db: Db,
   { householdId, month, today }: { householdId: string; month: YearMonth; today: string },
 ): Promise<MonthOverview> {
-  const [ledger, budgetList, accounts, categoryList, investments, snapshots, members] = await Promise.all([
+  const [ledger, budgetList, accounts, categoryList, investments, snapshots, members, settled] = await Promise.all([
     listLedger(db, { householdId }),
     listBudgets(db, { householdId }),
     listAccounts(db, { householdId, includeArchived: true }),
@@ -55,6 +56,7 @@ export async function getMonthOverview(
     listInvestments(db, { householdId, includeArchived: true }),
     listSnapshots(db, { householdId }),
     listMembers(db, { householdId }),
+    listSettledInvoices(db, { householdId }),
   ]);
 
   const isCurrentMonth = compareYM(month, yearMonthOf(today)) === 0;
@@ -90,7 +92,11 @@ export async function getMonthOverview(
     .filter((a) => a.kind === "credit_card" && a.closingDay && a.dueDay)
     .map((a) => ({
       account: { id: a.id, name: a.name, archived: a.archived },
-      ...cardInvoices({ id: a.id, closingDay: a.closingDay!, dueDay: a.dueDay! }, ledger, today),
+      ...cardInvoices(
+        { id: a.id, closingDay: a.closingDay!, dueDay: a.dueDay!, settledReferences: settled.get(a.id) },
+        ledger,
+        today,
+      ),
     }))
     // Cartão arquivado só aparece se ainda deve algo.
     .filter((c) => !c.account.archived || c.open.remainingCents > 0 || c.closedUnpaid.length > 0);
@@ -129,7 +135,7 @@ export async function getMonthOverview(
     budgets,
     categories,
     series: monthlySeries(ledger, month, 6),
-    netWorth: netWorthForMonth(month, today, netWorthInput(accounts, ledger, investments, snapshots)),
+    netWorth: netWorthForMonth(month, today, netWorthInput(accounts, ledger, investments, snapshots, settled)),
     invoices,
     insights,
     byPerson: expensesByPerson(

@@ -25,6 +25,7 @@ import type { Actor, Db } from "./types";
 export type StatementFile = { bytes: Uint8Array; fileName: string };
 
 export type CardImportRequest = {
+  today: string; // America/Sao_Paulo — detecta fatura já vencida
   accountId: string;
   files: StatementFile[];
   holders?: { last4: string; userId: string | null }[]; // mapeamento escolhido na tela
@@ -114,6 +115,7 @@ async function prepare(
     paymentAccountId: request.paymentAccountId ?? null,
     includeFuture: options.includeFuture,
     overrides: options.overrides,
+    today: request.today,
   };
 
   // Finais -> pessoa: o escolhido na tela; senão o salvo/sugerido.
@@ -153,6 +155,7 @@ export async function previewCardImport(db: Db, actor: Actor, request: CardImpor
 export type CardImportDecisions = {
   overrides: { hash: string; include?: boolean; categoryId?: string; spentBy?: SpentBy }[];
   rules: { pattern: string; categoryId: string }[]; // "lembrar para próximas"
+  paidDueDates?: string[]; // faturas já pagas fora do sistema (ausente = detectado no arquivo)
 };
 
 export type CardImportResult = { created: number; duplicates: number; months: string[] };
@@ -215,6 +218,7 @@ export async function applyCardImport(
     p_statements: plan.statements.map((s) => ({
       due_date: s.dueDate,
       total_cents: s.fileTotalCents,
+      paid: request.decisions.paidDueDates ? request.decisions.paidDueDates.includes(s.dueDate) : s.paidDetected,
       hashes: items.filter((l) => l.statementIndex === s.index && !l.future).map((l) => l.hash),
     })),
   });

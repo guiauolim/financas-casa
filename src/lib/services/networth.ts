@@ -5,6 +5,7 @@ import type { LedgerEntry } from "@/lib/finance/ledger";
 import { type NetWorthInput, type NetWorthReport, netWorthForMonth } from "@/lib/finance/networth";
 import type { Snapshot } from "@/lib/finance/portfolio";
 import { type Account, listAccounts } from "./accounts";
+import { listSettledInvoices } from "./card-invoices";
 import { type Investment, listInvestments, listSnapshots, toPortfolioInvestment } from "./investments";
 import { listLedger } from "./transactions";
 import type { Db } from "./types";
@@ -17,12 +18,13 @@ export function netWorthInput(
   ledger: readonly LedgerEntry[],
   investments: readonly Investment[],
   snapshots: readonly Snapshot[],
+  settled: ReadonlyMap<string, ReadonlySet<string>> = new Map(),
 ): NetWorthInput {
   return {
     moneyAccounts: accounts.filter((a) => a.kind !== "credit_card" && !a.archived),
     cards: accounts
       .filter((a) => a.kind === "credit_card" && a.closingDay && a.dueDay)
-      .map((a) => ({ id: a.id, closingDay: a.closingDay!, dueDay: a.dueDay! })),
+      .map((a) => ({ id: a.id, closingDay: a.closingDay!, dueDay: a.dueDay!, settledReferences: settled.get(a.id) })),
     ledger,
     investments: investments.map(toPortfolioInvestment),
     snapshots,
@@ -34,11 +36,16 @@ export async function getNetWorth(
   db: Db,
   { householdId, today, month }: { householdId: string; today: string; month?: YearMonth },
 ): Promise<NetWorthReport> {
-  const [accounts, ledger, investments, snapshots] = await Promise.all([
+  const [accounts, ledger, investments, snapshots, settled] = await Promise.all([
     listAccounts(db, { householdId, includeArchived: true }),
     listLedger(db, { householdId }),
     listInvestments(db, { householdId, includeArchived: true }),
     listSnapshots(db, { householdId }),
+    listSettledInvoices(db, { householdId }),
   ]);
-  return netWorthForMonth(month ?? yearMonthOf(today), today, netWorthInput(accounts, ledger, investments, snapshots));
+  return netWorthForMonth(
+    month ?? yearMonthOf(today),
+    today,
+    netWorthInput(accounts, ledger, investments, snapshots, settled),
+  );
 }

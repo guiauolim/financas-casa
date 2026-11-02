@@ -60,6 +60,7 @@ export type StatementSummary = {
   linesTotalCents: number; // compras + encargos − créditos (sem o pagamento)
   differenceCents: number | null; // total do arquivo − soma das linhas
   otherInvoiceCount: number; // linhas que o closing_day do cartão põe em outra fatura
+  paidDetected: boolean; // arquivo de "Fatura Paga" (ou, sem título, já vencida)
   counts: Record<LineStatus, number>;
 };
 
@@ -87,6 +88,7 @@ export type PlanInput = {
   overrides?: ReadonlyMap<string, LineOverride>;
   paymentAccountId?: string | null; // cria pagamentos como transferência desta conta
   includeFuture?: boolean; // inclui as parcelas futuras geradas
+  today?: string; // para detectar fatura já vencida (paga) quando o arquivo não diz
 };
 
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -256,6 +258,7 @@ export function planCardImport(input: PlanInput): CardImportPlan {
       linesTotalCents,
       differenceCents: s.totalCents === null ? null : s.totalCents - linesTotalCents,
       otherInvoiceCount,
+      paidDetected: isPaidStatement(s, input.today),
       counts,
     });
   });
@@ -339,4 +342,13 @@ export function suggestHolders(
     for (const f of finals) if (f.holderKind === "titular" && !result.get(f.last4)) result.set(f.last4, owner!);
   }
   return result;
+}
+
+// Fatura já paga? O título do arquivo manda ("Fatura Paga" sim; "aberta"/"fechada"/"atual"
+// não); sem pista no título, vale o vencimento já passado.
+export function isPaidStatement(statement: Pick<CardStatement, "title" | "dueDate">, today?: string): boolean {
+  const title = keyDescription(statement.title ?? "");
+  if (/\bpaga\b/.test(title)) return true;
+  if (/\b(aberta|fechada|atual|em aberto)\b/.test(title)) return false;
+  return Boolean(today && statement.dueDate < today);
 }
