@@ -257,7 +257,7 @@ export type Database = {
           due_date: string
           duplicate_count?: number
           household_id: string
-          id?: number
+          id?: never
           imported_at?: string
           imported_by?: string | null
           total_cents?: number | null
@@ -671,13 +671,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "transactions_spent_by_fkey"
-            columns: ["spent_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["user_id"]
-          },
-          {
             foreignKeyName: "transactions_account_id_fkey"
             columns: ["account_id"]
             isOneToOne: false
@@ -704,6 +697,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "households"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_spent_by_fkey"
+            columns: ["spent_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
           {
             foreignKeyName: "transactions_transfer_account_id_fkey"
