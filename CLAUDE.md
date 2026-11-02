@@ -2,6 +2,8 @@
 
 Sistema de finanças pessoais para um casal (2 usuários, mesma "casa"/household).
 **Etapa atual: app web + banco** (lançar, orçar, investir, visualizar), funcionando em produção.
+Investimentos: valores vêm do Excel de posição da B3 (importado à mão) ou de cadastro manual —
+sem cotação automática (brapi/cron ficaram para depois).
 **Etapa seguinte: bot do WhatsApp** (linguagem natural, PT-BR) usando a mesma camada de serviços.
 
 > Repositório PÚBLICO. Nunca commitar segredos, dados financeiros reais, números de
@@ -15,7 +17,8 @@ Sistema de finanças pessoais para um casal (2 usuários, mesma "casa"/household
 - **WhatsApp Cloud API (oficial da Meta)** — webhook em `/api/whatsapp/webhook`
 - **Vercel AI SDK** (`ai` + `@ai-sdk/openai`, opcional `@ai-sdk/anthropic`) com *tool calling* para
   interpretar mensagens. Provedor e modelo escolhidos por env (`AI_PROVIDER`, `AI_MODEL`) — começar com OpenAI
-- **Vercel Cron** para insights/resumos agendados
+- **Vercel Cron** para insights/resumos agendados (a partir da Fase 8)
+- **SheetJS** (`xlsx`, tarball oficial do cdn.sheetjs.com — o pacote do npm está parado com CVEs) para ler o Excel da B3
 - **Zod** para validar toda entrada externa (webhook, formulários, saídas do LLM)
 - Testes: **Vitest** (unit) — priorizar parser/tools do bot e regras de orçamento
 
@@ -30,11 +33,10 @@ src/
     (app)/dashboard/         # visão geral do mês
     (app)/transacoes/
     (app)/orcamentos/
-    (app)/investimentos/
+    (app)/investimentos/     # lista, novo, [id] (atualizar valor, histórico), importar (B3 com prévia)
     (app)/configuracoes/     # contas, cartões, categorias, telefones
     api/whatsapp/webhook/route.ts   # GET (verificação) + POST (mensagens)
-    api/cron/weekly-insights/route.ts
-    api/cron/update-quotes/route.ts
+    api/cron/weekly-insights/route.ts   # Fase 8
   lib/
     supabase/{server,client,admin}.ts   # admin = service role, SÓ server-side
     supabase/proxy.ts        # updateSession() usado por src/proxy.ts
@@ -44,17 +46,18 @@ src/
     categories/icon-names.ts # ícones lucide permitidos nas categorias
     whatsapp/{send,verify-signature,types}.ts
     agent/{index,tools,prompts,model}.ts # orquestração LLM + tools (model.ts escolhe o provedor)
-    services/{households,accounts,categories,transactions,budgets,overview,investments}.ts # casos de uso: usados
+    services/{households,accounts,categories,transactions,budgets,overview,investments,networth}.ts # casos de uso: usados
                                          # pelas Server Actions do site E pelas tools do bot
     services/errors.ts       # ServiceError (mensagem PT-BR para o usuário)
-    finance/{money,dates,ledger,billing,balances,installments,phone,summary,budget,insights}.ts # regras puras (testáveis)
-    quotes/brapi.ts
-    importers/b3-excel.ts
+    finance/{money,dates,ledger,billing,balances,installments,phone,summary,budget,insights,portfolio,networth}.ts # regras puras (testáveis)
+    importers/b3-excel.ts    # Excel de posição da B3 -> ativos normalizados (puro, sem I/O)
+    importers/__fixtures__/b3-posicao-ficticia.xlsx  # dados INVENTADOS (scripts/make-b3-fixture.mjs)
   proxy.ts                   # Next 16: substitui o middleware.ts
 supabase/
-  migrations/                # 0001_init, 0002_onboarding, 0003_cadastros_transacoes, 0004_orcamentos
+  migrations/                # 0001_init, 0002_onboarding, 0003_cadastros_transacoes, 0004_orcamentos, 0005_investimentos
   seed.sql                   # só dev local (`supabase db reset`); nunca vai para o remoto
   templates/                 # e-mails do Auth (magic link, convite) em PT-BR
+scripts/make-b3-fixture.mjs  # gera a fixture fictícia do importador
 docs/ROADMAP.md
 ```
 
@@ -67,6 +70,21 @@ docs/ROADMAP.md
   (`planInstallments` em `lib/finance/installments.ts`; resto de centavos na 1ª parcela).
 - Pagamento de fatura = **transferência** da conta para o cartão (não é despesa: o gasto já foi contado na compra).
 - Fatura: compra no dia do `closing_day` ou depois cai na fatura seguinte; dia 31 em mês curto = último dia.
+
+## Investimentos e patrimônio
+- **Patrimônio** = saldo das contas + investimentos ativos − faturas em aberto (`lib/finance/networth.ts`,
+  reaproveita `balances.ts`). Investimento usa sempre o valor **bruto**; o líquido da B3 (`net_value_cents`)
+  é só informação no detalhe do ativo e nunca entra em totais.
+- Histórico em `investment_snapshots` (um valor por ativo por data). Valor numa data = último snapshot
+  até ela; `current_value_cents`/`value_as_of` = snapshot mais recente (lançar valor antigo só completa o histórico).
+- Arquivar (`archived_on`) tira o ativo dos totais a partir da data, mas mantém o histórico.
+- **Importação da B3**: um arquivo por pessoa (CPF). Ativo B3 é único por casa + dono + `external_id`
+  (`CODIGO|INSTITUICAO`); reimportar faz upsert e grava snapshot na data de referência (RPC `apply_b3_import`,
+  numa transação). Renda Fixa: CURVA → MTM → FECHAMENTO; Tesouro: Valor bruto → Valor Atualizado.
+  Colunas lidas pelo nome; erro de estrutura diz a aba e a coluna.
+- O arquivo é processado **só em memória** (sem storage, sem log do conteúdo), até 4 MB (a Vercel corta
+  corpo acima de 4,5 MB). A prévia e a confirmação reenviam o arquivo; o sha256 garante que é o mesmo.
+- `*.xlsx`/`*.xls` estão no `.gitignore`: nunca commitar planilha real. Testes usam só a fixture fictícia.
 
 ## Next.js 16 — armadilhas
 - Esta versão difere do que costuma estar nos exemplos: ler o guia em `node_modules/next/dist/docs/`
@@ -117,7 +135,7 @@ docs/ROADMAP.md
 - RLS ligado em TODAS as tabelas; acesso por `is_household_member(household_id)`.
 - O proxy **não** roda em `/api/*`: cada rota de API se autentica sozinha (webhook pela assinatura
   `X-Hub-Signature-256`; crons por `Authorization: Bearer ${CRON_SECRET}`).
-- Rotas `/api/cron/*` exigem `Authorization: Bearer ${CRON_SECRET}`.
+- Rotas `/api/cron/*` (a partir da Fase 8) exigem `Authorization: Bearer ${CRON_SECRET}`.
 - Não logar conteúdo de mensagens nem valores em logs da Vercel além do necessário.
 
 ## Variáveis de ambiente
@@ -136,9 +154,10 @@ WHATSAPP_PHONE_NUMBER_ID=
 WHATSAPP_VERIFY_TOKEN=
 WHATSAPP_APP_SECRET=
 WHATSAPP_WEEKLY_TEMPLATE=
-BRAPI_TOKEN=
+# --- a partir da Fase 8 (insights agendados) ---
 CRON_SECRET=
 ```
+`BRAPI_TOKEN` não é usado: cotação automática ficou em "Ideias para depois" no ROADMAP.
 
 ## Guia visual (seguir em todas as telas)
 Referência: telas aprovadas no canvas "Finanças da Casa — telas" (Visão geral, Transações,
