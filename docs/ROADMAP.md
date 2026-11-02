@@ -10,7 +10,7 @@ plano antes de aprovar. Ao fim de cada fase: testar local, commit, push → Verc
 # Etapa A — App web + banco
 
 ## Fase 0 — Setup (manual)
-- [ ] Máquina: Node 22+, Git, pnpm (`corepack enable`), Claude Code
+- [ ] Máquina: Node 24 (`.nvmrc`), Git, pnpm (`corepack enable`), Claude Code
 - [ ] GitHub: repo público `financas-casa` com `CLAUDE.md`, `docs/ROADMAP.md`,
       `supabase/migrations/0001_init.sql`
 - [ ] Supabase: projeto em São Paulo; guardar URL, anon key e service role
