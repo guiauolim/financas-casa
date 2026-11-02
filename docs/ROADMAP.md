@@ -88,17 +88,33 @@ faturas abertas e um card de insights simples calculados por regra (sem IA ainda
   categoria) e Visão geral (KPIs, gastos por categoria, insights, entradas x saídas com Recharts,
   faturas abertas, últimos lançamentos), com seletor de mês
 
-## Fase 4 — Investimentos e patrimônio
+## Fase 4 — Investimentos e patrimônio ✅ concluída
 ```
 Implemente lib/services/investments e a tela Investimentos: cadastro manual de ativos
-(renda fixa, Tesouro, ações, FIIs, cripto); importador do Excel de posição exportado da
-Área do Investidor da B3 (lib/importers/b3-excel.ts, upload com preview e
-confirmação, sem duplicar ativos); cron diário /api/cron/update-quotes (Vercel Cron,
-protegido por CRON_SECRET) que atualiza ativos com ticker via brapi e grava
-investment_snapshots. Patrimônio = saldo das contas + investimentos − faturas em aberto,
-com gráfico de 12 meses.
+(classe, instituição, dono ou conjunto, ticker opcional, quantidade/preço médio opcionais,
+valor atual, apelidos), atualização de valor com snapshot datado e arquivamento; importador
+do Excel de posição da Área do Investidor da B3 (lib/importers/b3-excel.ts, upload com
+preview e confirmação, upsert por casa + dono + identificador do ativo, snapshot na data de
+referência, arquivo só em memória). SEM brapi e SEM cron. Patrimônio = saldo das contas +
+investimentos − faturas em aberto (lib/finance/networth.ts), com evolução de 12 meses.
 ```
 ✅ Pronto quando: seus investimentos estão no sistema e o patrimônio bate com a realidade.
+
+**Entregue** (branch `feat/fase-4-investimentos`):
+- Migration `0005_investimentos.sql`: `source` (manual/b3), `external_id` único por casa + dono,
+  `value_as_of`, `net_value_cents` (só exibição), `archived_on`, triggers de mesma casa, tabela
+  `b3_imports` e RPC `apply_b3_import` (upsert + snapshots + arquivamento numa transação)
+- `lib/importers/b3-excel`: abas Ações, BDR, ETF, Fundo de Investimento, Renda Fixa e Tesouro Direto
+  lidas pelo nome das colunas; números/datas BR; valor bruto (Renda Fixa: CURVA → MTM → FECHAMENTO;
+  Tesouro: Valor bruto); data de referência pelo nome do arquivo ou data de criação; erros em PT-BR.
+  Testes com fixture fictícia (`scripts/make-b3-fixture.mjs`)
+- `lib/finance`: `portfolio` (valor numa data pelos snapshots, variação, distribuição por classe,
+  série de 12 meses, aviso de 35 dias) e `networth` (contas + investimentos − faturas, variação no mês)
+- `lib/services`: `investments` (CRUD, `updateInvestmentValue`, prévia/aplicação da B3) e `networth`
+  (`getNetWorth`, base da tool do bot)
+- Investimentos (KPIs, evolução, distribuição, tabela com fonte Manual/B3 e variação, arquivados),
+  detalhe do ativo com histórico, importação em duas etapas; card Patrimônio da Visão geral com
+  detalhamento e variação no mês
 
 ---
 
@@ -144,6 +160,8 @@ fora da janela de 24h. Me passe o texto do template para cadastrar na Meta.
 ---
 
 ## Ideias para depois
+- Cotação automática: cron diário (Vercel Cron + `CRON_SECRET`) atualizando ativos com ticker via brapi
+  (`BRAPI_TOKEN`) e gravando `investment_snapshots`
 - Áudio no WhatsApp (transcrever e mandar para o agente)
 - Foto de nota fiscal/comprovante → lançamento
 - Importar OFX/CSV de extrato bancário

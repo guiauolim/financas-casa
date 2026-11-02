@@ -77,6 +77,64 @@ export type Database = {
           },
         ]
       }
+      b3_imports: {
+        Row: {
+          archived_count: number
+          created_count: number
+          household_id: string
+          id: number
+          imported_at: string
+          imported_by: string | null
+          owner_user_id: string
+          reference_date: string
+          updated_count: number
+        }
+        Insert: {
+          archived_count?: number
+          created_count?: number
+          household_id: string
+          id?: never
+          imported_at?: string
+          imported_by?: string | null
+          owner_user_id: string
+          reference_date: string
+          updated_count?: number
+        }
+        Update: {
+          archived_count?: number
+          created_count?: number
+          household_id?: string
+          id?: never
+          imported_at?: string
+          imported_by?: string | null
+          owner_user_id?: string
+          reference_date?: string
+          updated_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "b3_imports_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "b3_imports_imported_by_fkey"
+            columns: ["imported_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "b3_imports_owner_user_id_fkey"
+            columns: ["owner_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       budgets: {
         Row: {
           account_id: string | null
@@ -272,48 +330,66 @@ export type Database = {
       investments: {
         Row: {
           aliases: string[]
+          archived_on: string | null
           asset_class: Database["public"]["Enums"]["asset_class"]
           avg_price_cents: number | null
+          created_at: string
           current_value_cents: number
+          external_id: string | null
           household_id: string
           id: string
           institution: string | null
           last_quote_cents: number | null
           name: string
+          net_value_cents: number | null
           owner_user_id: string | null
           quantity: number | null
+          source: string
           ticker: string | null
           updated_at: string
+          value_as_of: string | null
         }
         Insert: {
           aliases?: string[]
+          archived_on?: string | null
           asset_class: Database["public"]["Enums"]["asset_class"]
           avg_price_cents?: number | null
+          created_at?: string
           current_value_cents?: number
+          external_id?: string | null
           household_id: string
           id?: string
           institution?: string | null
           last_quote_cents?: number | null
           name: string
+          net_value_cents?: number | null
           owner_user_id?: string | null
           quantity?: number | null
+          source?: string
           ticker?: string | null
           updated_at?: string
+          value_as_of?: string | null
         }
         Update: {
           aliases?: string[]
+          archived_on?: string | null
           asset_class?: Database["public"]["Enums"]["asset_class"]
           avg_price_cents?: number | null
+          created_at?: string
           current_value_cents?: number
+          external_id?: string | null
           household_id?: string
           id?: string
           institution?: string | null
           last_quote_cents?: number | null
           name?: string
+          net_value_cents?: number | null
           owner_user_id?: string | null
           quantity?: number | null
+          source?: string
           ticker?: string | null
           updated_at?: string
+          value_as_of?: string | null
         }
         Relationships: [
           {
@@ -516,6 +592,16 @@ export type Database = {
       accept_household_invite: {
         Args: { p_display_name: string }
         Returns: string
+      }
+      apply_b3_import: {
+        Args: {
+          p_archive_ids: string[]
+          p_household_id: string
+          p_items: Json
+          p_owner_user_id: string
+          p_reference_date: string
+        }
+        Returns: Json
       }
       create_household: {
         Args: { p_display_name: string; p_household_name: string }

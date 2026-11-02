@@ -1,13 +1,16 @@
 import "server-only";
-import { type CardInvoices, cardInvoices, totalBalance } from "@/lib/finance/balances";
+import { type CardInvoices, cardInvoices } from "@/lib/finance/balances";
 import { projectedCents, weekToDate } from "@/lib/finance/budget";
 import { compareYM, monthRange, type YearMonth, yearMonthOf } from "@/lib/finance/dates";
 import { buildInsights, type Insight } from "@/lib/finance/insights";
 import { inRange } from "@/lib/finance/ledger";
+import { type NetWorthReport, netWorthForMonth } from "@/lib/finance/networth";
 import { expensesByCategory, type MonthTotals, monthlySeries, type Summary, summarize } from "@/lib/finance/summary";
 import { type Account, listAccounts } from "./accounts";
 import { type BudgetStatusReport, type BudgetWithStatus, buildBudgetStatus, listBudgets } from "./budgets";
 import { listCategories } from "./categories";
+import { listInvestments, listSnapshots } from "./investments";
+import { netWorthInput } from "./networth";
 import { listLedger } from "./transactions";
 import type { Db } from "./types";
 
@@ -30,8 +33,8 @@ export type MonthOverview = {
   budgets: BudgetStatusReport;
   categories: CategorySpending[];
   series: MonthTotals[]; // 6 meses terminando no mês escolhido
-  // Patrimônio: por enquanto só contas. Fase 4 soma investimentos e desconta faturas.
-  netWorth: { accountsCents: number; investmentsCents: number | null };
+  // Contas + investimentos − faturas em aberto, hoje (ou no fim do mês escolhido), e variação no mês.
+  netWorth: NetWorthReport;
   invoices: CardInvoiceSummary[];
   insights: Insight[];
 };
@@ -41,11 +44,13 @@ export async function getMonthOverview(
   db: Db,
   { householdId, month, today }: { householdId: string; month: YearMonth; today: string },
 ): Promise<MonthOverview> {
-  const [ledger, budgetList, accounts, categoryList] = await Promise.all([
+  const [ledger, budgetList, accounts, categoryList, investments, snapshots] = await Promise.all([
     listLedger(db, { householdId }),
     listBudgets(db, { householdId }),
     listAccounts(db, { householdId, includeArchived: true }),
     listCategories(db, { householdId, includeArchived: true }),
+    listInvestments(db, { householdId, includeArchived: true }),
+    listSnapshots(db, { householdId }),
   ]);
 
   const isCurrentMonth = compareYM(month, yearMonthOf(today)) === 0;
@@ -77,7 +82,6 @@ export async function getMonthOverview(
     });
   }
 
-  const moneyAccounts = accounts.filter((a) => a.kind !== "credit_card" && !a.archived);
   const invoices: CardInvoiceSummary[] = accounts
     .filter((a) => a.kind === "credit_card" && a.closingDay && a.dueDay)
     .map((a) => ({
@@ -121,7 +125,7 @@ export async function getMonthOverview(
     budgets,
     categories,
     series: monthlySeries(ledger, month, 6),
-    netWorth: { accountsCents: totalBalance(moneyAccounts, ledger, today), investmentsCents: null },
+    netWorth: netWorthForMonth(month, today, netWorthInput(accounts, ledger, investments, snapshots)),
     invoices,
     insights,
   };

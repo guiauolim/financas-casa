@@ -8,6 +8,8 @@ import {
   type LucideIcon,
   Plus,
   Receipt,
+  TrendingDown,
+  TrendingUp,
   TriangleAlert,
 } from "lucide-react";
 import Link from "next/link";
@@ -20,6 +22,7 @@ import { Panel } from "@/components/panel";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { projectedCents } from "@/lib/finance/budget";
+import { formatBRL } from "@/lib/finance/money";
 import { daysBetween, formatDayMonth, formatMonthLong, toYearMonth } from "@/lib/finance/dates";
 import type { InsightTone } from "@/lib/finance/insights";
 import { cn } from "@/lib/utils";
@@ -66,7 +69,7 @@ const kpiValue = "text-2xl font-semibold tracking-tight";
 export async function Kpis(props: Props) {
   const mes = await mesOf(props);
   const overview = await loadOverview(mes);
-  const { summary, budgets, netWorth, isCurrentMonth } = overview;
+  const { summary, budgets, netWorth, isCurrentMonth, month } = overview;
   const total = budgets.total;
   const card = budgets.cards[0] ?? null; // o de maior uso
 
@@ -149,14 +152,44 @@ export async function Kpis(props: Props) {
         )}
       </Kpi>
 
-      {/* Único elemento escuro da tela. Fase 4: + investimentos − faturas em aberto. */}
+      {/* Único elemento escuro da tela: contas + investimentos − faturas em aberto. */}
       <section className="flex flex-col gap-2 rounded-[14px] bg-foreground p-5 text-card">
         <h2 className="text-[13px] text-card/75">Patrimônio</h2>
-        <Money cents={netWorth.accountsCents + (netWorth.investmentsCents ?? 0)} className={cn(kpiValue, "text-card")} />
-        <p className="text-[13px] text-card/75">
-          Saldo total em contas hoje.
-          {netWorth.investmentsCents === null ? " Investimentos entram em breve." : null}
+        <Money cents={netWorth.totalCents} className={cn(kpiValue, netWorth.totalCents < 0 ? "text-[#F5B4AC]" : "text-card")} />
+        <p className={cn("flex items-center gap-1 text-[13px]", netWorth.changeCents < 0 ? "text-[#F5B4AC]" : "text-[#9FE3C9]")}>
+          {netWorth.changeCents < 0 ? (
+            <TrendingDown className="size-4" aria-hidden />
+          ) : (
+            <TrendingUp className="size-4" aria-hidden />
+          )}
+          <span className="font-mono tabular-nums">
+            {netWorth.changeCents < 0 ? "−" : "+"}
+            {formatBRL(Math.abs(netWorth.changeCents))}
+          </span>
+          <span className="text-card/75">
+            {isCurrentMonth ? "no mês" : `em ${formatMonthLong(month)}`}
+          </span>
         </p>
+        <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-t border-card/15 pt-2 text-[13px]">
+          <dt className="text-card/75">Investimentos</dt>
+          <dd className="text-right font-mono tabular-nums">{formatBRL(netWorth.investmentsCents)}</dd>
+          <dt className="text-card/75">Contas</dt>
+          <dd className="text-right font-mono tabular-nums">
+            {netWorth.accountsCents < 0 ? "−" : ""}
+            {formatBRL(Math.abs(netWorth.accountsCents))}
+          </dd>
+          <dt className="text-card/75">Faturas em aberto</dt>
+          <dd className="text-right font-mono tabular-nums">
+            {netWorth.invoicesCents > 0 ? "−" : ""}
+            {formatBRL(Math.abs(netWorth.invoicesCents))}
+          </dd>
+        </dl>
+        <Link
+          href="/investimentos"
+          className="inline-flex min-h-11 items-center gap-1 self-start rounded text-sm font-medium text-card underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-card/50 focus-visible:outline-none"
+        >
+          Ver investimentos <ArrowRight className="size-4" aria-hidden />
+        </Link>
       </section>
     </div>
   );
