@@ -44,3 +44,9 @@ next-env.d.ts
 # supabase (a CLI também tem supabase/.gitignore)
 supabase/.temp/
 supabase/.branches/
+
+# planilhas (dados financeiros reais nunca entram no repo público);
+# exceção só para a fixture fictícia dos testes do importador da B3
+*.xlsx
+*.xls
+!src/lib/importers/__fixtures__/b3-posicao-ficticia.xlsx
