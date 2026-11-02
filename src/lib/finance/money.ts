@@ -28,3 +28,15 @@ export function formatAmountInput(cents: number): string {
   const text = formatBRL(Math.abs(cents)).replace(/^R\$\s?/, "").trim();
   return cents < 0 ? `-${text}` : text;
 }
+
+const brlCompact = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
+
+// Centavos -> "R$ 1,2 mil" (eixos de gráfico). Só para exibição aproximada.
+export function formatBRLCompact(cents: number): string {
+  return brlCompact.format(cents / 100);
+}

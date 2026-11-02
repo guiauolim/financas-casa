@@ -108,3 +108,8 @@ export function yearMonthOf(date: string): YearMonth {
 export function compareYM(a: YearMonth, b: YearMonth): number {
   return a.year * 12 + a.month - (b.year * 12 + b.month);
 }
+
+const monthAbbrevFormat = new Intl.DateTimeFormat("pt-BR", { month: "short", timeZone: "UTC" });
+// "2026-11" -> "nov"
+export const formatMonthAbbrev = (ym: string) =>
+  monthAbbrevFormat.format(new Date(`${ym}-15T12:00:00Z`)).replace(/\./g, "");
