@@ -26,6 +26,8 @@ export type Database = {
           id: string
           kind: Database["public"]["Enums"]["account_kind"]
           name: string
+          opening_balance_cents: number
+          opening_balance_date: string | null
           owner_user_id: string | null
         }
         Insert: {
@@ -39,6 +41,8 @@ export type Database = {
           id?: string
           kind: Database["public"]["Enums"]["account_kind"]
           name: string
+          opening_balance_cents?: number
+          opening_balance_date?: string | null
           owner_user_id?: string | null
         }
         Update: {
@@ -52,6 +56,8 @@ export type Database = {
           id?: string
           kind?: Database["public"]["Enums"]["account_kind"]
           name?: string
+          opening_balance_cents?: number
+          opening_balance_date?: string | null
           owner_user_id?: string | null
         }
         Relationships: [
@@ -126,6 +132,7 @@ export type Database = {
       categories: {
         Row: {
           aliases: string[]
+          archived: boolean
           household_id: string
           icon: string | null
           id: string
@@ -134,6 +141,7 @@ export type Database = {
         }
         Insert: {
           aliases?: string[]
+          archived?: boolean
           household_id: string
           icon?: string | null
           id?: string
@@ -142,6 +150,7 @@ export type Database = {
         }
         Update: {
           aliases?: string[]
+          archived?: boolean
           household_id?: string
           icon?: string | null
           id?: string
@@ -370,6 +379,7 @@ export type Database = {
           source: Database["public"]["Enums"]["tx_source"]
           transfer_account_id: string | null
           type: Database["public"]["Enums"]["tx_type"]
+          updated_at: string
         }
         Insert: {
           account_id: string
@@ -388,6 +398,7 @@ export type Database = {
           source?: Database["public"]["Enums"]["tx_source"]
           transfer_account_id?: string | null
           type: Database["public"]["Enums"]["tx_type"]
+          updated_at?: string
         }
         Update: {
           account_id?: string
@@ -406,6 +417,7 @@ export type Database = {
           source?: Database["public"]["Enums"]["tx_source"]
           transfer_account_id?: string | null
           type?: Database["public"]["Enums"]["tx_type"]
+          updated_at?: string
         }
         Relationships: [
           {
