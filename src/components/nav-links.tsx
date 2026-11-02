@@ -13,13 +13,17 @@ const NAV_ITEMS = [
   { href: "/configuracoes", label: "Configurações", icon: Settings },
 ] as const;
 
+// Lê a rota: fica dentro de <Suspense> (há rotas dinâmicas como /transacoes/[id]).
+// O fallback é o mesmo menu sem item ativo.
 export function NavLinks() {
-  const pathname = usePathname();
+  return <NavList pathname={usePathname()} />;
+}
 
+export function NavList({ pathname }: { pathname: string | null }) {
   return (
     <ul className="flex gap-1 md:flex-col">
       {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
-        const active = pathname === href || pathname.startsWith(`${href}/`);
+        const active = pathname !== null && (pathname === href || pathname.startsWith(`${href}/`));
         return (
           <li key={href} className="shrink-0">
             <Link

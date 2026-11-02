@@ -1,7 +1,7 @@
 import { Wallet } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
-import { NavLinks } from "@/components/nav-links";
+import { NavLinks, NavList } from "@/components/nav-links";
 import { UserMenu, UserMenuSkeleton } from "@/components/user-menu";
 
 // Desktop: coluna de 220px à esquerda. Celular: barra no topo com o menu rolando
@@ -26,7 +26,9 @@ export function AppSidebar() {
         </div>
       </div>
       <nav aria-label="Menu principal" className="-mx-4 overflow-x-auto px-4 md:mx-0 md:flex-1 md:px-0">
-        <NavLinks />
+        <Suspense fallback={<NavList pathname={null} />}>
+          <NavLinks />
+        </Suspense>
       </nav>
       <div className="hidden border-t border-divider pt-4 md:block">
         <Suspense fallback={<UserMenuSkeleton />}>
