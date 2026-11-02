@@ -1,4 +1,4 @@
-import { FileUp, Plus, Receipt, Trash2 } from "lucide-react";
+import { Plus, Receipt, Trash2 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -35,10 +35,6 @@ export default function TransacoesPage({ searchParams }: PageProps<"/transacoes"
         description="Entradas, saídas e transferências."
         actions={
           <>
-            <Link href="/transacoes/importar" className={buttonVariants({ variant: "outline" })}>
-              <FileUp aria-hidden />
-              Importar fatura
-            </Link>
             <Link href="/transacoes/lixeira" className={buttonVariants({ variant: "outline" })}>
               <Trash2 aria-hidden />
               Lixeira
