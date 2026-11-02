@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expensesByCategory, monthlySeries, summarize } from "./summary";
+import { expensesByCategory, expensesByPerson, monthlySeries, summarize } from "./summary";
 
 describe("summarize", () => {
   it("soma entradas e saídas e ignora transferências", () => {
@@ -52,6 +52,39 @@ describe("monthlySeries e expensesByCategory", () => {
     expect(expensesByCategory(entries, { year: 2026, month: 11 })).toEqual([
       { categoryId: "mercado", spentCents: 8000 },
       { categoryId: "lazer", spentCents: 7000 },
+    ]);
+  });
+});
+
+describe("expensesByPerson", () => {
+  const e = (amountCents: number, occurredOn: string, spentBy: string | null | undefined, type: "expense" | "income" = "expense") => ({
+    type,
+    amountCents,
+    occurredOn,
+    accountId: "c",
+    transferAccountId: null,
+    categoryId: null,
+    spentBy,
+  });
+
+  it("agrupa por Casa e membros, só despesas do mês", () => {
+    const result = expensesByPerson(
+      [
+        e(1000, "2026-03-01", null),
+        e(500, "2026-03-10", "ana"),
+        e(250, "2026-03-31", "ana"),
+        e(9999, "2026-04-01", "ana"), // outro mês
+        e(7000, "2026-03-05", "ana", "income"), // receita
+        e(300, "2026-03-05", undefined), // sem spent_by → Casa
+        e(40, "2026-03-05", "ex-membro"), // desconhecido → Casa
+      ],
+      { year: 2026, month: 3 },
+      ["ana", "bruno"],
+    );
+    expect(result).toEqual([
+      { spentBy: null, spentCents: 1340 },
+      { spentBy: "ana", spentCents: 750 },
+      { spentBy: "bruno", spentCents: 0 },
     ]);
   });
 });

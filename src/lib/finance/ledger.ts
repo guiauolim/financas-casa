@@ -7,6 +7,7 @@ export type LedgerEntry = {
   accountId: string;
   transferAccountId: string | null;
   categoryId: string | null;
+  spentBy?: string | null; // de quem é (null = Casa)
 };
 
 export type DateRange = { from: string; to: string }; // inclusivo

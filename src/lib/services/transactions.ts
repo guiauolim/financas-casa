@@ -2,6 +2,7 @@ import "server-only";
 import { monthRange, type YearMonth } from "@/lib/finance/dates";
 import type { LedgerEntry } from "@/lib/finance/ledger";
 import { planInstallments } from "@/lib/finance/installments";
+import { defaultSpentBy, type SpentBy } from "@/lib/finance/spent-by";
 import type { AccountKind } from "@/lib/validation/accounts";
 import type { TxType } from "@/lib/validation/categories";
 import type { Scope, TransactionInput } from "@/lib/validation/transactions";
@@ -19,6 +20,10 @@ export type Transaction = {
   source: TxSource;
   createdBy: string | null;
   createdByName: string | null;
+  // De quem é o lançamento: membro ou null = Casa (≠ quem lançou).
+  spentBy: SpentBy;
+  spentByName: string | null;
+  cardLastDigits: string | null;
   deletedAt: string | null;
   account: { id: string; name: string; kind: AccountKind };
   transferAccount: { id: string; name: string; kind: AccountKind } | null;
@@ -28,12 +33,13 @@ export type Transaction = {
 };
 
 const SELECT = `
-  id, type, amount_cents, description, occurred_on, source, created_by, deleted_at, created_at,
+  id, type, amount_cents, description, occurred_on, source, created_by, spent_by, card_last_digits, deleted_at, created_at,
   installment_group_id, installment_number, installment_total,
   account:accounts!transactions_account_id_fkey(id, name, kind),
   transfer_account:accounts!transactions_transfer_account_id_fkey(id, name, kind),
   category:categories!transactions_category_id_fkey(id, name, icon),
-  creator:profiles!transactions_created_by_fkey(display_name)
+  creator:profiles!transactions_created_by_fkey(display_name),
+  spender:profiles!transactions_spent_by_fkey(display_name)
 `;
 
 type Row = {
@@ -44,6 +50,8 @@ type Row = {
   occurred_on: string;
   source: TxSource;
   created_by: string | null;
+  spent_by: string | null;
+  card_last_digits: string | null;
   deleted_at: string | null;
   installment_group_id: string | null;
   installment_number: number | null;
@@ -52,6 +60,7 @@ type Row = {
   transfer_account: { id: string; name: string; kind: AccountKind } | null;
   category: { id: string; name: string; icon: string | null } | null;
   creator: { display_name: string } | null;
+  spender: { display_name: string } | null;
 };
 
 function toTransaction(row: Row): Transaction {
@@ -64,6 +73,9 @@ function toTransaction(row: Row): Transaction {
     source: row.source,
     createdBy: row.created_by,
     createdByName: row.creator?.display_name ?? null,
+    spentBy: row.spent_by,
+    spentByName: row.spender?.display_name ?? null,
+    cardLastDigits: row.card_last_digits,
     deletedAt: row.deleted_at,
     account: row.account ?? { id: "", name: "—", kind: "checking" },
     transferAccount: row.transfer_account,
@@ -85,7 +97,8 @@ export type ListFilters = {
   month: YearMonth;
   accountId?: string;
   categoryId?: string;
-  createdBy?: string;
+  // De quem é: id do membro, null = só Casa, undefined = todos.
+  spentBy?: SpentBy;
 };
 
 export async function listTransactions(db: Db, filters: ListFilters): Promise<Transaction[]> {
@@ -102,7 +115,8 @@ export async function listTransactions(db: Db, filters: ListFilters): Promise<Tr
     query = query.or(`account_id.eq.${filters.accountId},transfer_account_id.eq.${filters.accountId}`);
   }
   if (filters.categoryId) query = query.eq("category_id", filters.categoryId);
-  if (filters.createdBy) query = query.eq("created_by", filters.createdBy);
+  if (filters.spentBy === null) query = query.is("spent_by", null).neq("type", "transfer");
+  else if (filters.spentBy) query = query.eq("spent_by", filters.spentBy);
   const { data, error } = await query
     .order("occurred_on", { ascending: false })
     .order("created_at", { ascending: false })
@@ -165,7 +179,7 @@ export async function listLedger(db: Db, { householdId }: { householdId: string 
   for (let page = 0; ; page++) {
     const { data, error } = await db
       .from("transactions")
-      .select("id, type, amount_cents, occurred_on, account_id, transfer_account_id, category_id")
+      .select("id, type, amount_cents, occurred_on, account_id, transfer_account_id, category_id, spent_by")
       .eq("household_id", householdId)
       .is("deleted_at", null)
       .order("occurred_on")
@@ -180,6 +194,7 @@ export async function listLedger(db: Db, { householdId }: { householdId: string 
         accountId: row.account_id,
         transferAccountId: row.transfer_account_id,
         categoryId: row.category_id,
+        spentBy: row.spent_by,
       });
     }
     if ((data?.length ?? 0) < LEDGER_PAGE) return entries;
@@ -225,7 +240,7 @@ async function assertReferences(
   householdId: string,
   input: TransactionInput,
   current?: Transaction,
-): Promise<void> {
+): Promise<{ categoryHouseholdDefault: boolean }> {
   const accountIds = [input.accountId, input.type === "transfer" ? input.transferAccountId : null].filter(
     (id): id is string => Boolean(id),
   );
@@ -244,10 +259,11 @@ async function assertReferences(
   }
 
   const categoryId = input.type === "transfer" ? undefined : input.categoryId;
+  let categoryHouseholdDefault = false;
   if (categoryId) {
     const { data: category, error: categoryError } = await db
       .from("categories")
-      .select("id, type, archived")
+      .select("id, type, archived, household_default")
       .eq("household_id", householdId)
       .eq("id", categoryId)
       .maybeSingle();
@@ -257,7 +273,30 @@ async function assertReferences(
     if (category.archived && current?.category?.id !== categoryId) {
       throw new ServiceError("Esta categoria está arquivada.", "categoryId");
     }
+    categoryHouseholdDefault = category.household_default;
   }
+
+  const spentBy = input.type === "transfer" ? undefined : input.spentBy;
+  if (spentBy) {
+    const { data: member, error: memberError } = await db
+      .from("profiles")
+      .select("user_id")
+      .eq("household_id", householdId)
+      .eq("user_id", spentBy)
+      .maybeSingle();
+    throwIf(memberError);
+    if (!member) throw new ServiceError("Escolha um membro da casa.", "spentBy");
+  }
+  return { categoryHouseholdDefault };
+}
+
+// De quem é: transferência não é de ninguém; sem escolha explícita vale a regra única
+// (categoria da casa → Casa; senão quem está lançando — no bot, quem mandou a mensagem).
+function resolveSpentBy(input: TransactionInput, categoryHouseholdDefault: boolean, personUserId: string, fallback?: SpentBy): SpentBy {
+  if (input.type === "transfer") return null;
+  if (input.spentBy !== undefined) return input.spentBy;
+  if (fallback !== undefined) return fallback;
+  return defaultSpentBy({ categoryHouseholdDefault, personUserId });
 }
 
 function fields(input: TransactionInput) {
@@ -280,8 +319,14 @@ export async function createTransaction(
   input: TransactionInput,
   { source = "web" }: { source?: TxSource } = {},
 ): Promise<CreatedTransactions> {
-  await assertReferences(db, actor.householdId, input);
-  const base = { ...fields(input), household_id: actor.householdId, created_by: actor.userId, source };
+  const { categoryHouseholdDefault } = await assertReferences(db, actor.householdId, input);
+  const base = {
+    ...fields(input),
+    spent_by: resolveSpentBy(input, categoryHouseholdDefault, actor.userId),
+    household_id: actor.householdId,
+    created_by: actor.userId,
+    source,
+  };
   const count = input.type === "expense" ? input.installments : 1;
 
   const groupId = count > 1 ? crypto.randomUUID() : null;
@@ -317,9 +362,13 @@ export async function updateTransaction(
   if (current.installment && input.type !== "expense") {
     throw new ServiceError("Parcelas são sempre despesas.", "type");
   }
-  await assertReferences(db, actor.householdId, input, current);
+  const { categoryHouseholdDefault } = await assertReferences(db, actor.householdId, input, current);
 
-  const shared = { ...fields(input), amount_cents: input.amountCents };
+  const shared = {
+    ...fields(input),
+    spent_by: resolveSpentBy(input, categoryHouseholdDefault, actor.userId, current.spentBy),
+    amount_cents: input.amountCents,
+  };
   const { error } = await db
     .from("transactions")
     .update({ ...shared, occurred_on: input.occurredOn })

@@ -32,7 +32,7 @@ async function EditTransaction({ params }: Pick<PageProps<"/transacoes/[id]">, "
   const db = await createClient();
   const transaction = await getTransaction(db, { householdId: actor.householdId, transactionId: id.data });
   if (!transaction || transaction.deletedAt) notFound();
-  const { accounts, categories } = await loadFormOptions(db, actor.householdId, {
+  const { accounts, categories, members } = await loadFormOptions(db, actor.householdId, {
     accountIds: [transaction.account.id, transaction.transferAccount?.id],
     categoryId: transaction.category?.id,
   });
@@ -53,9 +53,12 @@ async function EditTransaction({ params }: Pick<PageProps<"/transacoes/[id]">, "
           transferAccountId: transaction.transferAccount?.id ?? null,
           categoryId: transaction.category?.id ?? null,
           installment: transaction.installment,
+          spentBy: transaction.spentBy,
         }}
         accounts={accounts}
         categories={categories}
+        members={members}
+        currentUserId={actor.userId}
         today={todayInSaoPaulo()}
       />
     </Panel>

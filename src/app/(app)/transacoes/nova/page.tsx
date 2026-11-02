@@ -27,7 +27,7 @@ export default function NovaTransacaoPage() {
 
 async function NewTransaction() {
   const actor = await requireActor();
-  const { accounts, categories } = await loadFormOptions(await createClient(), actor.householdId);
+  const { accounts, categories, members } = await loadFormOptions(await createClient(), actor.householdId);
   if (accounts.length === 0) {
     return (
       <EmptyState
@@ -44,7 +44,13 @@ async function NewTransaction() {
   }
   return (
     <Panel className="max-w-2xl">
-      <TransactionForm accounts={accounts} categories={categories} today={todayInSaoPaulo()} />
+      <TransactionForm
+        accounts={accounts}
+        categories={categories}
+        members={members}
+        currentUserId={actor.userId}
+        today={todayInSaoPaulo()}
+      />
     </Panel>
   );
 }

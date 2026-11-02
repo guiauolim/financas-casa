@@ -8,6 +8,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { invoiceFor } from "@/lib/finance/billing";
 import { formatDate, formatMonthShort, parseISODate, parseYearMonth } from "@/lib/finance/dates";
 import { MAX_INSTALLMENTS, splitInstallments } from "@/lib/finance/installments";
+import { defaultSpentBy, HOUSE, spentByToParam } from "@/lib/finance/spent-by";
 import { formatAmountInput, formatBRL, parseBRL } from "@/lib/finance/money";
 import { ACCOUNT_KIND_LABELS, type AccountKind } from "@/lib/validation/accounts";
 import { TX_TYPE_LABELS, TX_TYPES, type TxType } from "@/lib/validation/categories";
@@ -21,7 +22,8 @@ export type FormAccount = {
   closingDay: number | null;
   dueDay: number | null;
 };
-export type FormCategory = { id: string; name: string; type: TxType };
+export type FormCategory = { id: string; name: string; type: TxType; householdDefault: boolean };
+export type FormMember = { userId: string; displayName: string };
 
 export type TransactionFormValues = {
   id: string;
@@ -33,6 +35,7 @@ export type TransactionFormValues = {
   transferAccountId: string | null;
   categoryId: string | null;
   installment: { number: number; total: number; purchaseTotalCents?: number | null } | null;
+  spentBy: string | null;
 };
 
 function cardInvoiceText(account: FormAccount | undefined, date: string): string | null {
@@ -46,11 +49,15 @@ export function TransactionForm({
   transaction,
   accounts,
   categories,
+  members,
+  currentUserId,
   today,
 }: {
   transaction?: TransactionFormValues;
   accounts: FormAccount[];
   categories: FormCategory[];
+  members: FormMember[];
+  currentUserId: string;
   today: string;
 }) {
   const [state, action, pending] = useActionState(saveTransactionAction, {} as FormState);
@@ -63,6 +70,18 @@ export function TransactionForm({
   const [accountId, setAccountId] = useState(transaction?.accountId ?? "");
   const [transferAccountId, setTransferAccountId] = useState(transaction?.transferAccountId ?? "");
   const [installments, setInstallments] = useState("1");
+  // De quem: segue a categoria (regra única defaultSpentBy) até a pessoa escolher à mão.
+  const [spentBy, setSpentBy] = useState(
+    transaction ? spentByToParam(transaction.spentBy) : spentByToParam(currentUserId),
+  );
+  const [spentByTouched, setSpentByTouched] = useState(Boolean(transaction));
+  const onCategoryChange = (categoryId: string) => {
+    if (spentByTouched) return;
+    const category = categories.find((c) => c.id === categoryId);
+    setSpentBy(
+      spentByToParam(defaultSpentBy({ categoryHouseholdDefault: category?.householdDefault, personUserId: currentUserId })),
+    );
+  };
 
   const account = accounts.find((a) => a.id === accountId);
   const target = accounts.find((a) => a.id === transferAccountId);
@@ -200,6 +219,7 @@ export function TransactionForm({
             name="categoryId"
             label="Categoria"
             defaultValue={transaction?.type === type ? (transaction.categoryId ?? "") : ""}
+            onChange={(e) => onCategoryChange(e.target.value)}
             error={errors.categoryId}
           >
             <option value="">Sem categoria</option>
@@ -211,6 +231,23 @@ export function TransactionForm({
           </SelectField>
         </div>
       )}
+
+      {type !== "transfer" ? (
+        <Segmented
+          name="spentBy"
+          legend={type === "income" ? "De quem é a receita" : "De quem é o gasto"}
+          value={spentBy}
+          onChange={(value) => {
+            setSpentBy(value);
+            setSpentByTouched(true);
+          }}
+          options={[
+            { value: HOUSE, label: "Casa" },
+            ...members.map((m) => ({ value: m.userId, label: m.displayName })),
+          ]}
+          error={errors.spentBy}
+        />
+      ) : null}
 
       {type === "expense" && !transaction ? (
         <Field
