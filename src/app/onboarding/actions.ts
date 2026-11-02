@@ -1,21 +1,15 @@
 "use server";
 
+import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
 import { getCurrentProfile, getCurrentUser } from "@/lib/auth/session";
 import { acceptPendingInvite, createHousehold, inviteMember } from "@/lib/services/households";
 import { siteUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
+import { fieldErrors, type FormState } from "@/lib/validation/form";
 import { acceptInviteSchema, createHouseholdSchema, inviteMemberSchema } from "@/lib/validation/onboarding";
 
-export type FormState = {
-  error?: string;
-  fieldErrors?: Partial<Record<string, string>>;
-  success?: string;
-};
-
-function fieldErrors(issues: { path: PropertyKey[]; message: string }[]) {
-  return Object.fromEntries(issues.map((issue) => [String(issue.path[0]), issue.message]));
-}
+export type { FormState };
 
 export async function createHouseholdAction(_prev: FormState, formData: FormData): Promise<FormState> {
   if (!(await getCurrentUser())) redirect("/login");
@@ -62,6 +56,7 @@ export async function inviteMemberAction(_prev: FormState, formData: FormData): 
       email: parsed.data.email,
       redirectTo: `${siteUrl()}/onboarding`,
     });
+    refresh(); // atualiza a lista de convites pendentes em Configurações → Membros
     return {
       success:
         result === "invited"

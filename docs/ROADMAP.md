@@ -41,7 +41,7 @@ Vercel em Supabase → Authentication → URL Configuration (Site URL + Redirect
 - Layout com menu lateral, páginas vazias com estado vazio e skeleton
 - CI: lint, typecheck, test e gitleaks; variável nova `NEXT_PUBLIC_SITE_URL`
 
-## Fase 2 — Cadastros e transações
+## Fase 2 — Cadastros e transações ✅ concluída
 ```
 Implemente lib/services (accounts, transactions) e as telas:
 Configurações — contas e cartões (closing_day, due_day, limite, dono ou conjunta),
@@ -52,6 +52,18 @@ Server Actions finas + Zod chamando os serviços. Regras de fatura em
 lib/finance/billing.ts (em qual fatura cai uma compra) com testes.
 ```
 ✅ Pronto quando: dá para lançar o mês inteiro pelo site, inclusive compras parceladas.
+
+**Entregue** (branch `feat/fase-2-cadastros`):
+- Migration `0003_cadastros_transacoes.sql`: saldo inicial em `accounts`
+  (`opening_balance_cents`, `opening_balance_date`), `categories.archived`, `transactions.updated_at`
+  com trigger, checks de transferência/parcelas/cartão/E.164 e trigger que exige conta e categoria da mesma casa
+- `lib/finance`: `parseBRL`, `dates`, `billing` (fatura pelo `closing_day`; compra no dia do fechamento
+  vai para a seguinte; meses curtos limitam ao último dia), `installments` (resto de centavos na 1ª parcela),
+  `phone` (E.164), `summary` (transferência fora dos totais)
+- `lib/services`: `accounts`, `categories`, `transactions`, membros e convites em `households`
+- Configurações (contas e cartões, categorias com ícone, membros com WhatsApp e convites) e Transações
+  (filtros, totais, parcelado, transferência/pagamento de fatura, "só esta"/"esta e as próximas", lixeira)
+- Login: mensagem para e-mail sem acesso quando o cadastro está fechado
 
 ## Fase 3 — Orçamentos e Visão geral
 ```

@@ -1,5 +1,6 @@
 "use server";
 
+import { otpErrorMessage } from "@/lib/auth/otp-errors";
 import { siteUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 import { loginSchema } from "@/lib/validation/onboarding";
@@ -18,11 +19,9 @@ export async function sendMagicLink(_prev: LoginState, formData: FormData): Prom
     options: { emailRedirectTo: `${siteUrl()}/auth/confirm` },
   });
   if (error) {
-    const message =
-      error.status === 429
-        ? "Muitas tentativas. Espere um minuto e tente de novo."
-        : "Não foi possível enviar o link. Tente novamente.";
-    return { status: "error", message, email: parsed.data.email };
+    // Só o código (sem e-mail) para diagnosticar nos logs da Vercel.
+    console.warn(`[login] signInWithOtp falhou: ${error.status ?? "?"} ${error.code ?? "sem código"}`);
+    return { status: "error", message: otpErrorMessage(error), email: parsed.data.email };
   }
 
   return { status: "sent", email: parsed.data.email };
