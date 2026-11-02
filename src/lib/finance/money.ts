@@ -23,7 +23,8 @@ export function parseBRL(input: string): number | null {
   return Number.isSafeInteger(cents) ? cents : null;
 }
 
-// Centavos -> "1.234,56" (sem "R$"), para preencher campos de formulário.
+// Centavos -> "1.234,56" (sem "R$"; negativo com "-"), para preencher campos de formulário.
 export function formatAmountInput(cents: number): string {
-  return formatBRL(cents).replace(/^-?R\$\s?/, "").trim();
+  const text = formatBRL(Math.abs(cents)).replace(/^R\$\s?/, "").trim();
+  return cents < 0 ? `-${text}` : text;
 }

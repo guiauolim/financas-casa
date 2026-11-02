@@ -1,46 +1,11 @@
 "use client";
 
 import { useActionState } from "react";
+import { Field, FormError, FormSuccess } from "@/components/form";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { acceptInviteAction, createHouseholdAction, inviteMemberAction, type FormState } from "./actions";
 
 const initialState: FormState = {};
-
-function Field({
-  name,
-  label,
-  error,
-  ...inputProps
-}: { name: string; label: string; error?: string } & React.ComponentProps<"input">) {
-  const errorId = `${name}-error`;
-  return (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor={name}>{label}</Label>
-      <Input
-        id={name}
-        name={name}
-        aria-invalid={Boolean(error) || undefined}
-        aria-describedby={error ? errorId : undefined}
-        {...inputProps}
-      />
-      {error ? (
-        <p id={errorId} className="text-[13px] text-danger" role="alert">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function FormError({ message }: { message?: string }) {
-  return message ? (
-    <p className="text-[13px] text-danger" role="alert">
-      {message}
-    </p>
-  ) : null;
-}
 
 export function CreateHouseholdForm() {
   const [state, action, pending] = useActionState(createHouseholdAction, initialState);
@@ -89,11 +54,7 @@ export function InviteMemberForm() {
         error={state.fieldErrors?.email}
       />
       <FormError message={state.error} />
-      {state.success ? (
-        <p className="rounded-lg bg-primary-soft px-3 py-2 text-[13px] text-primary-soft-foreground" role="status">
-          {state.success}
-        </p>
-      ) : null}
+      <FormSuccess message={state.success} />
       <Button type="submit" disabled={pending}>
         {pending ? "Enviando…" : "Enviar convite"}
       </Button>

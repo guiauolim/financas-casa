@@ -50,5 +50,6 @@ describe("formatAmountInput", () => {
   it("formata sem o símbolo", () => {
     expect(formatAmountInput(123456).replace(/\s/g, " ")).toBe("1.234,56");
     expect(formatAmountInput(5)).toBe("0,05");
+    expect(formatAmountInput(-123456)).toBe("-1.234,56");
   });
 });
