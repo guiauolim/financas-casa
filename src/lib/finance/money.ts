@@ -28,3 +28,19 @@ export function formatAmountInput(cents: number): string {
   const text = formatBRL(Math.abs(cents)).replace(/^R\$\s?/, "").trim();
   return cents < 0 ? `-${text}` : text;
 }
+
+const brlCompact = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+  notation: "compact",
+  // Explícito: o mínimo padrão de casas no modo compacto varia com a versão do ICU
+  // (Node 22 dava "R$ 0,0", Node 24 dá "R$ 0").
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 1,
+  trailingZeroDisplay: "stripIfInteger",
+});
+
+// Centavos -> "R$ 1,2 mil" (eixos de gráfico). Só para exibição aproximada.
+export function formatBRLCompact(cents: number): string {
+  return brlCompact.format(cents / 100);
+}

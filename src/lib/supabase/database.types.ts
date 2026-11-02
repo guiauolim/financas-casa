@@ -86,6 +86,7 @@ export type Database = {
           id: string
           limit_cents: number
           period: Database["public"]["Enums"]["budget_period"]
+          updated_at: string
         }
         Insert: {
           account_id?: string | null
@@ -95,6 +96,7 @@ export type Database = {
           id?: string
           limit_cents: number
           period: Database["public"]["Enums"]["budget_period"]
+          updated_at?: string
         }
         Update: {
           account_id?: string | null
@@ -104,6 +106,7 @@ export type Database = {
           id?: string
           limit_cents?: number
           period?: Database["public"]["Enums"]["budget_period"]
+          updated_at?: string
         }
         Relationships: [
           {

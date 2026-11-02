@@ -73,3 +73,43 @@ export const formatMonthLong = (ym: YearMonth) => monthFormat.format(utc(monthRa
 export const formatMonthShort = (ym: YearMonth) => shortMonthFormat.format(utc(monthRange(ym).from)).replace(/\./g, ""); // "nov de 2026"
 export const formatDayMonth = (date: string) => dayFormat.format(utc(date)); // "01/11"
 export const formatDate = (date: string) => fullDayFormat.format(utc(date)); // "01/11/2026"
+
+// Soma `delta` dias a uma data de calendário (meio-dia UTC: sem efeito de fuso/horário de verão).
+export function addDays(date: string, delta: number): string {
+  if (!parseISODate(date)) throw new RangeError(`Data inválida: ${date}`);
+  const d = utc(date);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+// Dias de `from` até `to` (to − from), em dias de calendário.
+export function daysBetween(from: string, to: string): number {
+  return Math.round((utc(to).getTime() - utc(from).getTime()) / 86_400_000);
+}
+
+// Dia da semana com segunda = 0 … domingo = 6.
+export function weekdayIndex(date: string): number {
+  if (!parseISODate(date)) throw new RangeError(`Data inválida: ${date}`);
+  return (utc(date).getUTCDay() + 6) % 7;
+}
+
+// Semana de segunda a domingo que contém `date`.
+export function weekRange(date: string): { from: string; to: string } {
+  const from = addDays(date, -weekdayIndex(date));
+  return { from, to: addDays(from, 6) };
+}
+
+export function yearMonthOf(date: string): YearMonth {
+  const parsed = parseISODate(date);
+  if (!parsed) throw new RangeError(`Data inválida: ${date}`);
+  return { year: parsed.year, month: parsed.month };
+}
+
+export function compareYM(a: YearMonth, b: YearMonth): number {
+  return a.year * 12 + a.month - (b.year * 12 + b.month);
+}
+
+const monthAbbrevFormat = new Intl.DateTimeFormat("pt-BR", { month: "short", timeZone: "UTC" });
+// "2026-11" -> "nov"
+export const formatMonthAbbrev = (ym: string) =>
+  monthAbbrevFormat.format(new Date(`${ym}-15T12:00:00Z`)).replace(/\./g, "");

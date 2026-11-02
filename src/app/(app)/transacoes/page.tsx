@@ -1,9 +1,10 @@
-import { ChevronLeft, ChevronRight, Plus, Receipt, Trash2 } from "lucide-react";
+import { Plus, Receipt, Trash2 } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
 import { selectClassName } from "@/components/form";
 import { Money } from "@/components/money";
+import { MonthNav, monthFromParam } from "@/components/month-nav";
 import { PageHeader } from "@/components/page-header";
 import { ListSkeleton, Panel } from "@/components/panel";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/empty-state";
 import { requireActor } from "@/lib/auth/session";
-import { addMonthsYM, formatMonthLong, parseYearMonth, todayInSaoPaulo, toYearMonth } from "@/lib/finance/dates";
+import { toYearMonth } from "@/lib/finance/dates";
 import { summarize } from "@/lib/finance/summary";
 import { listAccounts } from "@/lib/services/accounts";
 import { listCategories } from "@/lib/services/categories";
@@ -20,6 +21,7 @@ import { listTransactions } from "@/lib/services/transactions";
 import { createClient } from "@/lib/supabase/server";
 import { TX_TYPE_LABELS } from "@/lib/validation/categories";
 import { type TransactionFilters, transactionFiltersSchema } from "@/lib/validation/transactions";
+import { DeleteTransactionButton } from "./delete-transaction-button";
 import { TransactionRows } from "./transaction-rows";
 
 export const metadata: Metadata = { title: "Transações" };
@@ -76,7 +78,7 @@ async function Transactions({ searchParams }: Pick<PageProps<"/transacoes">, "se
   const filters = transactionFiltersSchema.parse(await searchParams);
   const actor = await requireActor();
   const db = await createClient();
-  const month = parseYearMonth(filters.mes ?? todayInSaoPaulo().slice(0, 7))!;
+  const month = monthFromParam(filters.mes);
   const monthKey = toYearMonth(month);
 
   const [transactions, accounts, categories, members] = await Promise.all([
@@ -99,25 +101,7 @@ async function Transactions({ searchParams }: Pick<PageProps<"/transacoes">, "se
     <>
       <Panel>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-1">
-            <Link
-              href={filterHref(filters, toYearMonth(addMonthsYM(month, -1)))}
-              className={buttonVariants({ variant: "ghost", size: "icon" })}
-              aria-label="Mês anterior"
-            >
-              <ChevronLeft aria-hidden />
-            </Link>
-            <h2 className="min-w-40 text-center text-[17px] font-semibold first-letter:uppercase" aria-live="polite">
-              {formatMonthLong(month)}
-            </h2>
-            <Link
-              href={filterHref(filters, toYearMonth(addMonthsYM(month, 1)))}
-              className={buttonVariants({ variant: "ghost", size: "icon" })}
-              aria-label="Próximo mês"
-            >
-              <ChevronRight aria-hidden />
-            </Link>
-          </div>
+          <MonthNav month={month} href={(m) => filterHref(filters, m)} />
         </div>
         <form method="get" action="/transacoes" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
           <input type="hidden" name="mes" value={monthKey} />
@@ -206,7 +190,11 @@ async function Transactions({ searchParams }: Pick<PageProps<"/transacoes">, "se
           title="Lançamentos"
           description={`${transactions.length} ${transactions.length === 1 ? "lançamento" : "lançamentos"}`}
         >
-          <TransactionRows transactions={transactions} memberIndex={memberIndex} />
+          <TransactionRows
+            transactions={transactions}
+            memberIndex={memberIndex}
+            actions={(tx) => <DeleteTransactionButton tx={tx} compact />}
+          />
         </Panel>
       )}
     </>

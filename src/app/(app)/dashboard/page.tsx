@@ -1,19 +1,74 @@
-import { LayoutDashboard } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { Metadata } from "next";
-import { EmptyState } from "@/components/empty-state";
+import Link from "next/link";
+import { Suspense } from "react";
 import { PageHeader } from "@/components/page-header";
+import { buttonVariants } from "@/components/ui/button";
+import {
+  CategorySpending,
+  IncomeExpense,
+  Insights,
+  Kpis,
+  KpisSkeleton,
+  MonthSelector,
+  MonthSelectorSkeleton,
+  OpenInvoices,
+  PanelSkeleton,
+  RecentTransactions,
+} from "./sections";
 
 export const metadata: Metadata = { title: "Visão geral" };
 
-export default function DashboardPage() {
+// Linha de dois cards na proporção 3:2 (quebra no celular).
+const wide = "min-w-[min(100%,340px)] flex-[3]";
+const narrow = "min-w-[min(100%,280px)] flex-[2]";
+
+export default function DashboardPage({ searchParams }: PageProps<"/dashboard">) {
   return (
     <>
-      <PageHeader title="Visão geral" description="Resumo do mês da casa." />
-      <EmptyState
-        icon={LayoutDashboard}
-        title="Nada por aqui ainda"
-        description="Quando vocês lançarem as primeiras transações, o resumo do mês aparece aqui."
+      <PageHeader
+        title="Visão geral"
+        description="Resumo do mês da casa."
+        actions={
+          <Link href="/transacoes/nova" className={buttonVariants()}>
+            <Plus aria-hidden />
+            Novo lançamento
+          </Link>
+        }
       />
+      <Suspense fallback={<MonthSelectorSkeleton />}>
+        <MonthSelector searchParams={searchParams} />
+      </Suspense>
+      <Suspense fallback={<KpisSkeleton />}>
+        <Kpis searchParams={searchParams} />
+      </Suspense>
+      <div className="flex flex-wrap gap-4">
+        <div className={wide}>
+          <Suspense fallback={<PanelSkeleton rows={6} className="h-full" />}>
+            <CategorySpending searchParams={searchParams} />
+          </Suspense>
+        </div>
+        <div className={narrow}>
+          <Suspense fallback={<PanelSkeleton rows={3} className="h-full" />}>
+            <Insights searchParams={searchParams} />
+          </Suspense>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-4">
+        <div className={wide}>
+          <Suspense fallback={<PanelSkeleton rows={5} className="h-full" />}>
+            <IncomeExpense searchParams={searchParams} />
+          </Suspense>
+        </div>
+        <div className={narrow}>
+          <Suspense fallback={<PanelSkeleton rows={3} className="h-full" />}>
+            <OpenInvoices searchParams={searchParams} />
+          </Suspense>
+        </div>
+      </div>
+      <Suspense fallback={<PanelSkeleton rows={8} />}>
+        <RecentTransactions searchParams={searchParams} />
+      </Suspense>
     </>
   );
 }

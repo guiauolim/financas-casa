@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAmountInput, formatBRL, parseBRL } from "./money";
+import { formatAmountInput, formatBRL, formatBRLCompact, parseBRL } from "./money";
 
 // Intl usa espaço não separável entre "R$" e o número.
 const normalize = (s: string) => s.replace(/\s/g, " ");
@@ -51,5 +51,12 @@ describe("formatAmountInput", () => {
     expect(formatAmountInput(123456).replace(/\s/g, " ")).toBe("1.234,56");
     expect(formatAmountInput(5)).toBe("0,05");
     expect(formatAmountInput(-123456)).toBe("-1.234,56");
+  });
+});
+
+describe("formatBRLCompact", () => {
+  it("abrevia para eixos de gráfico", () => {
+    expect(formatBRLCompact(1234567).replace(/ /g, " ")).toBe("R$ 12,3 mil");
+    expect(formatBRLCompact(0).replace(/ /g, " ")).toBe("R$ 0");
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addMonthsToDate, addMonthsYM, monthRange, parseISODate, parseYearMonth, todayInSaoPaulo } from "./dates";
+import { compareYM, daysBetween, formatMonthAbbrev, addMonthsToDate, addMonthsYM, monthRange, parseISODate, parseYearMonth, todayInSaoPaulo } from "./dates";
 
 describe("dates", () => {
   it("valida datas de calendário", () => {
@@ -25,5 +25,14 @@ describe("dates", () => {
     // 01/11 02:00 UTC ainda é 31/10 em São Paulo (UTC-3).
     expect(todayInSaoPaulo(new Date("2026-11-01T02:00:00Z"))).toBe("2026-10-31");
     expect(todayInSaoPaulo(new Date("2026-11-01T03:00:00Z"))).toBe("2026-11-01");
+  });
+});
+
+describe("helpers de dia e mês", () => {
+  it("diferença em dias e mês abreviado", () => {
+    expect(daysBetween("2026-02-27", "2026-03-02")).toBe(3);
+    expect(daysBetween("2026-11-10", "2026-11-05")).toBe(-5);
+    expect(formatMonthAbbrev("2026-11")).toBe("nov");
+    expect(compareYM({ year: 2026, month: 12 }, { year: 2027, month: 1 })).toBeLessThan(0);
   });
 });

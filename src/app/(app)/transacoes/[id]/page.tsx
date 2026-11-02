@@ -1,16 +1,14 @@
-import { Trash2 } from "lucide-react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { z } from "zod";
-import { ConfirmAction } from "@/components/action-button";
 import { PageHeader } from "@/components/page-header";
 import { FormSkeleton, Panel } from "@/components/panel";
 import { requireActor } from "@/lib/auth/session";
 import { todayInSaoPaulo } from "@/lib/finance/dates";
 import { getTransaction } from "@/lib/services/transactions";
 import { createClient } from "@/lib/supabase/server";
-import { deleteTransactionAction } from "../actions";
+import { DeleteTransactionButton } from "../delete-transaction-button";
 import { loadFormOptions } from "../form-options";
 import { TransactionForm } from "../transaction-form";
 
@@ -39,35 +37,10 @@ async function EditTransaction({ params }: Pick<PageProps<"/transacoes/[id]">, "
     categoryId: transaction.category?.id,
   });
 
-  const fields = { id: transaction.id, month: transaction.occurredOn.slice(0, 7) };
-  const installment = transaction.installment;
-  const hasFollowing = installment && installment.number < installment.total;
-
   return (
     <Panel
       className="max-w-2xl"
-      actions={
-        <ConfirmAction
-          action={deleteTransactionAction}
-          variant="destructive"
-          trigger={
-            <>
-              <Trash2 aria-hidden />
-              Excluir
-            </>
-          }
-          title={installment ? `Excluir parcela ${installment.number} de ${installment.total}?` : "Excluir lançamento?"}
-          description="O lançamento vai para a lixeira e pode ser restaurado depois."
-          options={
-            hasFollowing
-              ? [
-                  { label: "Só esta", fields: { ...fields, scope: "one" }, destructive: true },
-                  { label: "Esta e as próximas", fields: { ...fields, scope: "following" }, destructive: true },
-                ]
-              : [{ label: "Excluir", fields: { ...fields, scope: "one" }, destructive: true }]
-          }
-        />
-      }
+      actions={<DeleteTransactionButton tx={transaction} />}
     >
       <TransactionForm
         transaction={{
@@ -79,7 +52,7 @@ async function EditTransaction({ params }: Pick<PageProps<"/transacoes/[id]">, "
           accountId: transaction.account.id,
           transferAccountId: transaction.transferAccount?.id ?? null,
           categoryId: transaction.category?.id ?? null,
-          installment,
+          installment: transaction.installment,
         }}
         accounts={accounts}
         categories={categories}
