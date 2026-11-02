@@ -65,7 +65,7 @@ lib/finance/billing.ts (em qual fatura cai uma compra) com testes.
   (filtros, totais, parcelado, transferência/pagamento de fatura, "só esta"/"esta e as próximas", lixeira)
 - Login: mensagem para e-mail sem acesso quando o cadastro está fechado
 
-## Fase 3 — Orçamentos e Visão geral
+## Fase 3 — Orçamentos e Visão geral ✅ concluída
 ```
 Implemente lib/finance/budget.ts (mensal total e por categoria; semanal por cartão,
 semana segunda→domingo; status ok/atenção ≥80%/estourado >100%; projeção do mês no
@@ -75,6 +75,18 @@ gastos por categoria, últimos lançamentos, entradas x saídas em 6 meses (Rech
 faturas abertas e um card de insights simples calculados por regra (sem IA ainda).
 ```
 ✅ Pronto quando: a Visão geral mostra seus números reais e os alertas de orçamento.
+
+**Entregue** (branch `feat/fase-3-orcamentos`):
+- Migration `0004_orcamentos.sql`: check de escopo (`monthly` sem conta; `weekly` só com cartão e sem
+  categoria), trigger que exige categoria de despesa e cartão da mesma casa, `budgets.updated_at`
+- `lib/finance`: `budget` (status ok/atenção/estourado, semana segunda→domingo, projeção do mês — sem
+  projeção no dia 1, nunca abaixo do já lançado), `balances` (saldo a partir do saldo inicial; faturas
+  com pagamentos alocados FIFO, da mais antiga para a mais nova), `insights` (até 3, por regra),
+  `summary` (série de 6 meses, gasto por categoria)
+- `lib/services`: `budgets` (CRUD + `getBudgetStatus`, base da tool do bot), `overview`, `listLedger`
+- Orçamentos (mensal da casa com marcador de projeção, semanal por cartão com barras por dia, grade por
+  categoria) e Visão geral (KPIs, gastos por categoria, insights, entradas x saídas com Recharts,
+  faturas abertas, últimos lançamentos), com seletor de mês
 
 ## Fase 4 — Investimentos e patrimônio
 ```

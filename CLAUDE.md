@@ -44,15 +44,15 @@ src/
     categories/icon-names.ts # ícones lucide permitidos nas categorias
     whatsapp/{send,verify-signature,types}.ts
     agent/{index,tools,prompts,model}.ts # orquestração LLM + tools (model.ts escolhe o provedor)
-    services/{households,accounts,categories,transactions,budgets,investments}.ts # casos de uso: usados
+    services/{households,accounts,categories,transactions,budgets,overview,investments}.ts # casos de uso: usados
                                          # pelas Server Actions do site E pelas tools do bot
     services/errors.ts       # ServiceError (mensagem PT-BR para o usuário)
-    finance/{money,dates,billing,installments,phone,summary,budget,insights}.ts # regras puras (testáveis)
+    finance/{money,dates,ledger,billing,balances,installments,phone,summary,budget,insights}.ts # regras puras (testáveis)
     quotes/brapi.ts
     importers/b3-excel.ts
   proxy.ts                   # Next 16: substitui o middleware.ts
 supabase/
-  migrations/                # 0001_init, 0002_onboarding, 0003_cadastros_transacoes
+  migrations/                # 0001_init, 0002_onboarding, 0003_cadastros_transacoes, 0004_orcamentos
   seed.sql                   # só dev local (`supabase db reset`); nunca vai para o remoto
   templates/                 # e-mails do Auth (magic link, convite) em PT-BR
 docs/ROADMAP.md
