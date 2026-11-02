@@ -116,6 +116,28 @@ investimentos − faturas em aberto (lib/finance/networth.ts), com evolução de
   detalhe do ativo com histórico, importação em duas etapas; card Patrimônio da Visão geral com
   detalhamento e variação no mês
 
+## Fase 4.5 — Importar faturas do cartão + "de quem é o gasto" ✅ concluída
+```
+Importe faturas do cartão (Itaú .xls/.xlsx; interface pronta para outros bancos) para trazer o
+histórico. Novo conceito spent_by (Casa ou membro), categorias "da casa", finais do cartão →
+pessoa (card_holders, mesmo cartão), classificação por comércio com regras aprendidas
+(merchant_rules), prévia editável e gravação numa transação (RPC). Sem duplicar ao reimportar.
+```
+✅ Pronto quando: as faturas dos últimos meses estão no sistema, com categoria e de quem.
+
+**Entregue** (branch `feat/import-fatura-cartao`):
+- Migration `0006_import_fatura_pessoas.sql`: `transactions.spent_by` (null = Casa), `import_hash`
+  (único por casa, inclui a lixeira), `card_last_digits`; `categories.household_default`; tabelas
+  `card_holders`, `merchant_rules`, `card_statement_imports`; RPC `apply_card_import` (security invoker)
+- `lib/finance/spent-by` (regra única de "de quem"), `lib/finance/categorize` (normalização do comércio,
+  regras aprendidas > palavras-chave > apelidos > Outros), `expensesByPerson`
+- `lib/importers/card-statement` (`itau.ts`, `plan.ts`: tipo, data das parcelas, grupo determinístico,
+  hash de deduplicação, parcelas futuras, conferência com o total, totais por pessoa); helpers de planilha
+  compartilhados com a B3 em `lib/importers/excel.ts`. Fixtures fictícias: `scripts/make-itau-fixture.mjs`
+- `/transacoes/importar` (cartão + arquivos → finais → prévia com edição em lote), campo "De quem" no
+  lançamento, filtro "Pessoa" por `spent_by`, card "Por pessoa" na Visão geral, "Gasto da casa por padrão"
+  nas categorias e Configurações → Regras de categoria
+
 ---
 
 # Etapa B — WhatsApp
@@ -146,7 +168,12 @@ cartões e categorias com aliases. Devem funcionar: "gastei 52,30 no mercado no 
 "uber 18 ontem", "tv 3000 em 10x no itaú", "recebi salário 8500", "quanto ainda posso
 gastar no cartão essa semana?", "quanto eu tenho no total?". Ambíguo → perguntar
 (com botões quando fizer sentido). Confirmar cada escrita e avisar orçamento ≥80%/>100%.
-Testes com o modelo mockado.
+De quem é o gasto (spent_by): use a regra única de lib/finance/spent-by (categoria "da casa" →
+Casa; senão quem mandou a mensagem) — é o que createTransaction faz quando spentBy não vem.
+"foi da <nome>", "da casa", "meu" mudam spent_by. Categoria: rodar categorize() com as regras
+aprendidas (merchant_rules) antes de o LLM chutar; se cair em "Outros", perguntar.
+Cartão com adicionais é UMA conta: o final informado ("no final 1234") só define a pessoa via
+card_holders, nunca outra conta. Testes com o modelo mockado.
 ```
 
 ## Fase 8 — Insights proativos
@@ -164,7 +191,7 @@ fora da janela de 24h. Me passe o texto do template para cadastrar na Meta.
   (`BRAPI_TOKEN`) e gravando `investment_snapshots`
 - Áudio no WhatsApp (transcrever e mandar para o agente)
 - Foto de nota fiscal/comprovante → lançamento
-- Importar OFX/CSV de extrato bancário
+- Importar OFX/CSV de extrato bancário e faturas de outros bancos (novo `CardStatementParser`)
 - Recorrências (aluguel, assinaturas) lançadas automaticamente
 - Metas (viagem, reserva de emergência) com progresso
 - Divisão de gastos entre o casal

@@ -3,7 +3,8 @@
 Sistema de finanças pessoais para um casal (2 usuários, mesma "casa"/household).
 **Etapa atual: app web + banco** (lançar, orçar, investir, visualizar), funcionando em produção.
 Investimentos: valores vêm do Excel de posição da B3 (importado à mão) ou de cadastro manual —
-sem cotação automática (brapi/cron ficaram para depois).
+sem cotação automática (brapi/cron ficaram para depois). Histórico de gastos do cartão vem da
+importação de faturas (Itaú); dali para frente, pelo WhatsApp.
 **Etapa seguinte: bot do WhatsApp** (linguagem natural, PT-BR) usando a mesma camada de serviços.
 
 > Repositório PÚBLICO. Nunca commitar segredos, dados financeiros reais, números de
@@ -31,10 +32,10 @@ src/
     auth/signout/route.ts
     onboarding/              # 1º login: cria a casa ou aceita convite; /onboarding/convite
     (app)/dashboard/         # visão geral do mês
-    (app)/transacoes/
+    (app)/transacoes/        # lista, nova, [id], lixeira, importar (faturas do cartão com prévia)
     (app)/orcamentos/
     (app)/investimentos/     # lista, novo, [id] (atualizar valor, histórico), importar (B3 com prévia)
-    (app)/configuracoes/     # contas, cartões, categorias, telefones
+    (app)/configuracoes/     # contas, cartões, categorias, regras de categoria, membros/telefones
     api/whatsapp/webhook/route.ts   # GET (verificação) + POST (mensagens)
     api/cron/weekly-insights/route.ts   # Fase 8
   lib/
@@ -46,18 +47,23 @@ src/
     categories/icon-names.ts # ícones lucide permitidos nas categorias
     whatsapp/{send,verify-signature,types}.ts
     agent/{index,tools,prompts,model}.ts # orquestração LLM + tools (model.ts escolhe o provedor)
-    services/{households,accounts,categories,transactions,budgets,overview,investments,networth}.ts # casos de uso: usados
+    services/{households,accounts,categories,transactions,budgets,overview,investments,networth,
+              card-holders,merchant-rules,card-import}.ts # casos de uso: usados
                                          # pelas Server Actions do site E pelas tools do bot
     services/errors.ts       # ServiceError (mensagem PT-BR para o usuário)
-    finance/{money,dates,ledger,billing,balances,installments,phone,summary,budget,insights,portfolio,networth}.ts # regras puras (testáveis)
+    finance/{money,dates,ledger,billing,balances,installments,phone,summary,budget,insights,portfolio,networth,
+             spent-by,categorize}.ts # regras puras (testáveis)
+    importers/excel.ts       # helpers de planilha (magic bytes, números/datas BR, leitura) — B3 e faturas
+    importers/limits.ts      # MAX_UPLOAD_BYTES (sem dependências: usado também no navegador)
     importers/b3-excel.ts    # Excel de posição da B3 -> ativos normalizados (puro, sem I/O)
-    importers/__fixtures__/b3-posicao-ficticia.xlsx  # dados INVENTADOS (scripts/make-b3-fixture.mjs)
+    importers/card-statement/ # faturas de cartão: types, itau.ts (parser), plan.ts (dedup/parcelas), index.ts
+    importers/__fixtures__/  # SÓ dados INVENTADOS: b3-posicao-ficticia.xlsx, itau-fatura-ficticia-*.xlsx/.xls
   proxy.ts                   # Next 16: substitui o middleware.ts
 supabase/
-  migrations/                # 0001_init, 0002_onboarding, 0003_cadastros_transacoes, 0004_orcamentos, 0005_investimentos
+  migrations/                # 0001_init … 0005_investimentos, 0006_import_fatura_pessoas
   seed.sql                   # só dev local (`supabase db reset`); nunca vai para o remoto
   templates/                 # e-mails do Auth (magic link, convite) em PT-BR
-scripts/make-b3-fixture.mjs  # gera a fixture fictícia do importador
+scripts/make-{b3,itau}-fixture.mjs  # geram as fixtures fictícias dos importadores
 docs/ROADMAP.md
 ```
 
@@ -70,6 +76,36 @@ docs/ROADMAP.md
   (`planInstallments` em `lib/finance/installments.ts`; resto de centavos na 1ª parcela).
 - Pagamento de fatura = **transferência** da conta para o cartão (não é despesa: o gasto já foi contado na compra).
 - Fatura: compra no dia do `closing_day` ou depois cai na fatura seguinte; dia 31 em mês curto = último dia.
+
+## Casa e pessoa ("de quem é o gasto")
+- `transactions.spent_by` = membro dono do gasto/receita; **null = Casa** (conjunto). É diferente de
+  `created_by` (quem lançou). Transferência nunca tem `spent_by`.
+- Regra única em `lib/finance/spent-by.ts` (`defaultSpentBy`): categoria com `household_default`
+  (Mercado, Moradia, Contas da casa, Pets por padrão; editável em Configurações → Categorias) → Casa;
+  senão a pessoa do contexto (site: quem lança; importação: dono do final; bot: quem mandou a mensagem).
+  `createTransaction` aplica a regra quando `spentBy` não vem.
+- Filtro "Pessoa" em Transações e o card "Por pessoa" usam `spent_by` (`?pessoa=casa|<user_id>`).
+- Cartão com titular + adicionais + virtuais é **uma conta só**: fatura, limite e orçamento semanal são
+  do cartão inteiro. `card_holders (account_id, last_digits, user_id)` só diz de quem é cada final.
+
+## Importação de faturas do cartão
+- `lib/importers/card-statement`: `CardStatementParser` por banco (hoje `itau.ts`), colunas pelo nome,
+  erros em PT-BR com aba/coluna/linha. O arquivo do Itaú não traz o fechamento: vem do `closing_day`.
+- `plan.ts` (puro): compra → despesa; estorno/crédito → receita (abate a fatura); IOF/anuidade/juros/
+  multa/encargos → "Impostos e taxas"; pagamento → ignorado (ou transferência de uma conta escolhida).
+  Parcela k/n: `occurred_on` = data da compra + (k−1) meses; `installment_group_id` = UUID derivado da
+  compra (mesmo grupo em faturas/importações diferentes). Opção de criar as parcelas futuras.
+- Deduplicação: `import_hash` (sha256 de casa|conta|final|data|descrição|valor — ou k/n nas parcelas,
+  sem o valor — |ordinal de linhas idênticas), único por casa e incluindo a lixeira. Reimportar ou
+  enviar faturas sobrepostas não duplica.
+- Conferência: soma das linhas (sem o pagamento) × total do arquivo, com a diferença na prévia.
+- Classificação (`lib/finance/categorize.ts`): regras aprendidas (`merchant_rules`, "lembrar para
+  próximas" na prévia, editáveis em Configurações → Regras) > palavras-chave padrão > apelidos > "Outros".
+- Confirmar grava tudo numa transação (RPC `apply_card_import`, security invoker, `source='import'`).
+  O cliente só manda decisões; o servidor reprocessa o arquivo (sha256 confere) e refaz o plano.
+- Privacidade: igual à B3 (só em memória, sem log, até 4 MB no total). `*.xls`, `*.xlsx`, `*.csv`,
+  `*.ofx`, `*.pdf` no `.gitignore`; testes, fixtures, comentários e docs NUNCA usam descrições,
+  comércios, nomes ou finais de cartão de arquivos reais — só exemplos inventados.
 
 ## Investimentos e patrimônio
 - **Patrimônio** = saldo das contas + investimentos ativos − faturas em aberto (`lib/finance/networth.ts`,
@@ -123,6 +159,10 @@ docs/ROADMAP.md
 - Provedor/modelo via `AI_PROVIDER` (`openai` | `anthropic`) e `AI_MODEL` (modelo pequeno e barato
   para parsing; trocar se precisar). Toda a escolha fica em `lib/agent/model.ts`.
 - O LLM **nunca** escreve SQL. Ele só chama tools tipadas (Zod) que executam queries filtradas pelo `household_id` do remetente.
+- De quem é o gasto: `add_transaction` sem pessoa explícita → regra única (`defaultSpentBy`: categoria da
+  casa → Casa; senão o remetente). "foi da <nome>"/"da casa" definem `spent_by`. Categoria: `categorize()`
+  com as regras aprendidas antes do LLM chutar; "Outros" → perguntar. Final de cartão → pessoa via
+  `card_holders` (nunca outra conta).
 - Tools iniciais: `add_transaction`, `list_transactions`, `get_month_summary`, `get_budget_status`,
   `set_budget`, `update_investment_position`, `get_net_worth`, `undo_last`.
 - Ambiguidade (conta/cartão/categoria incertos) → perguntar de volta em vez de chutar.
