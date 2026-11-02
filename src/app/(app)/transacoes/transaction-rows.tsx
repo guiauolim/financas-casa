@@ -6,6 +6,7 @@ import { MemberAvatar } from "@/components/member-avatar";
 import { Money } from "@/components/money";
 import { SourceBadge } from "@/components/source-badge";
 import { formatDayMonth } from "@/lib/finance/dates";
+import { formatBRL } from "@/lib/finance/money";
 import type { Transaction } from "@/lib/services/transactions";
 
 function title(tx: Transaction): string {
@@ -40,11 +41,21 @@ function accountText(tx: Transaction) {
 }
 
 function InstallmentTag({ tx }: { tx: Transaction }) {
-  return tx.installment ? (
-    <span className="ml-2 rounded-full bg-muted px-2 py-0.5 font-mono text-xs text-muted-foreground">
-      {tx.installment.number}/{tx.installment.total}
+  if (!tx.installment) return null;
+  const { number, total, purchaseTotalCents } = tx.installment;
+  return (
+    <span className="ml-2 whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+      <span className="font-mono">
+        {number}/{total}
+      </span>
+      {purchaseTotalCents !== null ? (
+        <>
+          {" "}
+          · total <span className="font-mono">{formatBRL(purchaseTotalCents)}</span>
+        </>
+      ) : null}
     </span>
-  ) : null;
+  );
 }
 
 // Tabela no desktop e lista compacta no celular. `href` null = linha sem link (lixeira).

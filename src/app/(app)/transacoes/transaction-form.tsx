@@ -32,7 +32,7 @@ export type TransactionFormValues = {
   accountId: string;
   transferAccountId: string | null;
   categoryId: string | null;
-  installment: { number: number; total: number } | null;
+  installment: { number: number; total: number; purchaseTotalCents?: number | null } | null;
 };
 
 function cardInvoiceText(account: FormAccount | undefined, date: string): string | null {
@@ -71,13 +71,9 @@ export function TransactionForm({
   const count = Number(installments);
   const isNewInstallment = !transaction && type === "expense" && Number.isInteger(count) && count > 1;
 
-  let installmentPreview: string | null = null;
+  let installmentParts: number[] | null = null;
   if (isNewInstallment && amountCents && count <= MAX_INSTALLMENTS && amountCents >= count) {
-    const parts = splitInstallments(amountCents, count);
-    installmentPreview =
-      parts[0] === parts[1]
-        ? `${count}× de ${formatBRL(parts[1]!)}`
-        : `1ª de ${formatBRL(parts[0]!)} e ${count - 1}× de ${formatBRL(parts[1]!)}`;
+    installmentParts = splitInstallments(amountCents, count);
   }
   const invoiceText = type === "expense" ? cardInvoiceText(account, date) : null;
   const isBillPayment = type === "transfer" && target?.kind === "credit_card";
@@ -124,6 +120,24 @@ export function TransactionForm({
           error={errors.occurredOn}
         />
       </div>
+
+      {installmentParts && amountCents ? (
+        <p
+          className="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-lg bg-primary-soft px-3 py-2 text-sm text-primary-soft-foreground"
+          role="status"
+        >
+          <span>
+            Total <strong className="font-mono">{formatBRL(amountCents)}</strong>
+          </span>
+          <span aria-hidden>→</span>
+          <span className="sr-only">dividido em</span>
+          <strong className="font-mono">
+            {installmentParts[0] === installmentParts[1]
+              ? `${count}× de ${formatBRL(installmentParts[1]!)}`
+              : `1ª de ${formatBRL(installmentParts[0]!)} e ${count - 1}× de ${formatBRL(installmentParts[1]!)}`}
+          </strong>
+        </p>
+      ) : null}
 
       {type === "transfer" ? (
         <div className="grid gap-4 sm:grid-cols-2">
@@ -208,7 +222,7 @@ export function TransactionForm({
           max={MAX_INSTALLMENTS}
           value={installments}
           onChange={(e) => setInstallments(e.target.value)}
-          hint={installmentPreview ?? "1 = à vista. Cada parcela é lançada no mês correspondente."}
+          hint="1 = à vista. Informe o valor total da compra: ele é dividido entre as parcelas, uma por mês."
           error={errors.installments}
           className="sm:max-w-[calc(50%-8px)]"
         />
@@ -237,6 +251,13 @@ export function TransactionForm({
               <input type="radio" name="scope" value="following" className="size-4 accent-primary" />
               Esta e as próximas ({transaction.installment.total - transaction.installment.number + 1} parcelas)
             </label>
+          ) : null}
+          {transaction.installment.purchaseTotalCents != null ? (
+            <p className="text-[13px] text-muted-foreground">
+              Total da compra:{" "}
+              <span className="font-mono text-foreground">{formatBRL(transaction.installment.purchaseTotalCents)}</span>{" "}
+              em {transaction.installment.total} parcelas. O valor acima é o desta parcela.
+            </p>
           ) : null}
           <p className="text-[13px] text-muted-foreground">
             Conta, categoria, descrição e valor valem para as parcelas escolhidas; a data muda só nesta.

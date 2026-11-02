@@ -22,7 +22,8 @@ export type Transaction = {
   account: { id: string; name: string; kind: AccountKind };
   transferAccount: { id: string; name: string; kind: AccountKind } | null;
   category: { id: string; name: string; icon: string | null } | null;
-  installment: { groupId: string; number: number; total: number } | null;
+  // purchaseTotalCents: soma das parcelas não excluídas do grupo (total da compra).
+  installment: { groupId: string; number: number; total: number; purchaseTotalCents: number | null } | null;
 };
 
 const SELECT = `
@@ -68,7 +69,12 @@ function toTransaction(row: Row): Transaction {
     category: row.category,
     installment:
       row.installment_group_id && row.installment_number && row.installment_total
-        ? { groupId: row.installment_group_id, number: row.installment_number, total: row.installment_total }
+        ? {
+            groupId: row.installment_group_id,
+            number: row.installment_number,
+            total: row.installment_total,
+            purchaseTotalCents: null,
+          }
         : null,
   };
 }
@@ -101,7 +107,31 @@ export async function listTransactions(db: Db, filters: ListFilters): Promise<Tr
     .order("created_at", { ascending: false })
     .returns<Row[]>();
   throwIf(error);
-  return (data ?? []).map(toTransaction);
+  return withPurchaseTotals(db, filters.householdId, (data ?? []).map(toTransaction));
+}
+
+// Preenche o total da compra das parcelas (soma das parcelas não excluídas de
+// cada grupo), para a lista e a edição mostrarem "3/10 · total R$ X".
+async function withPurchaseTotals(db: Db, householdId: string, transactions: Transaction[]): Promise<Transaction[]> {
+  const groupIds = [...new Set(transactions.flatMap((tx) => (tx.installment ? [tx.installment.groupId] : [])))];
+  if (groupIds.length === 0) return transactions;
+  const { data, error } = await db
+    .from("transactions")
+    .select("installment_group_id, amount_cents")
+    .eq("household_id", householdId)
+    .in("installment_group_id", groupIds)
+    .is("deleted_at", null);
+  throwIf(error);
+  const totals = new Map<string, number>();
+  for (const row of data ?? []) {
+    if (!row.installment_group_id) continue;
+    totals.set(row.installment_group_id, (totals.get(row.installment_group_id) ?? 0) + row.amount_cents);
+  }
+  return transactions.map((tx) =>
+    tx.installment
+      ? { ...tx, installment: { ...tx.installment, purchaseTotalCents: totals.get(tx.installment.groupId) ?? null } }
+      : tx,
+  );
 }
 
 export async function listDeletedTransactions(db: Db, { householdId }: { householdId: string }) {
@@ -129,7 +159,11 @@ export async function getTransaction(
     .returns<Row[]>()
     .maybeSingle();
   throwIf(error);
-  return data ? toTransaction(data) : null;
+  if (!data) return null;
+  const transaction = toTransaction(data);
+  if (transaction.deletedAt) return transaction;
+  const [withTotal] = await withPurchaseTotals(db, householdId, [transaction]);
+  return withTotal!;
 }
 
 // Confere no servidor que conta, destino e categoria são da casa, estão ativos
