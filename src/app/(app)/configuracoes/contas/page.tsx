@@ -89,7 +89,8 @@ function AccountRows({ accounts, members }: { accounts: Account[]; members: Memb
                 {ACCOUNT_KIND_LABELS[account.kind]}
                 {account.kind === "credit_card" ? (
                   <>
-                    {" · "}fecha dia {account.closingDay} · vence dia {account.dueDay}
+                    {" · "}melhor dia de compra {account.closingDay} · vence dia {account.dueDay} · fatura pelo{" "}
+                    {account.invoiceNaming === "due" ? "vencimento" : "fechamento"}
                     {account.creditLimitCents ? (
                       <>
                         {" · "}limite <Money cents={account.creditLimitCents} />

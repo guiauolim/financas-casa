@@ -12,7 +12,8 @@ const entry = (
   amountCents: number,
   accountId: string,
   transferAccountId: string | null = null,
-): LedgerEntry => ({ type, occurredOn, amountCents, accountId, transferAccountId, categoryId: null });
+  invoiceRef: string | null = null,
+): LedgerEntry => ({ type, occurredOn, amountCents, accountId, transferAccountId, categoryId: null, invoiceRef });
 
 describe("accountBalance", () => {
   const entries = [
@@ -46,20 +47,20 @@ describe("accountBalance", () => {
 });
 
 describe("cardInvoices", () => {
-  // Fecha dia 3, vence dia 10 (mesmo mês). Compras de 03/10 a 02/11 → fatura que fecha em 03/11 e vence 10/11.
+  // Melhor dia 3, vence dia 10 (mesmo mês). Compras de 03/10 a 02/11 → fatura "2026-11", fecha 02/11, vence 10/11.
   const card = { id: CARD, closingDay: 3, dueDay: 10 };
 
   it("fatura aberta = compras do ciclo atual; pagamento da anterior não abate a aberta (FIFO)", () => {
     const entries = [
-      entry("expense", "2026-10-05", 30000, CARD), // fatura nov (fecha 03/11)
-      entry("expense", "2026-11-03", 10000, CARD), // dia do fechamento → fatura dez
+      entry("expense", "2026-10-05", 30000, CARD), // fatura nov (fecha 02/11)
+      entry("expense", "2026-11-03", 10000, CARD), // melhor dia de compra → fatura dez
       entry("expense", "2026-11-04", 5000, CARD), // fatura dez
       entry("transfer", "2026-11-09", 30000, BANK, CARD), // paga a fatura de nov, dentro do ciclo de dez
     ];
     const result = cardInvoices(card, entries, "2026-11-12");
     expect(result.open).toMatchObject({
-      reference: "2026-12",
-      closingDate: "2026-12-03",
+      ref: "2026-12",
+      closingDate: "2026-12-02",
       dueDate: "2026-12-10",
       chargesCents: 15000,
       paidCents: 0,
@@ -101,20 +102,23 @@ describe("cardInvoices", () => {
   it("parcelas futuras ficam nas faturas futuras", () => {
     const entries = ["2026-10-15", "2026-11-15", "2026-12-15"].map((date) => entry("expense", date, 10000, CARD));
     const result = cardInvoices(card, entries, "2026-11-20");
-    expect(result.open).toMatchObject({ reference: "2026-12", chargesCents: 10000 });
+    expect(result.open).toMatchObject({ ref: "2026-12", chargesCents: 10000 });
     // A de out/15 caiu na fatura de nov (já fechada, não paga).
-    expect(result.closedUnpaid.map((i) => i.reference)).toEqual(["2026-11"]);
+    expect(result.closedUnpaid.map((i) => i.ref)).toEqual(["2026-11"]);
+    expect(result.invoices.map((i) => i.ref)).toEqual(["2026-11", "2026-12", "2027-01"]);
+    // Limite comprometido inclui a parcela da fatura futura.
+    expect(result.limitUsedCents).toBe(30000);
   });
 
   it("vencimento no mês seguinte quando o dia do vencimento é antes do fechamento", () => {
     const late = { id: CARD, closingDay: 28, dueDay: 5 };
     const result = cardInvoices(late, [entry("expense", "2026-02-27", 1000, CARD)], "2026-02-27");
-    expect(result.open).toMatchObject({ closingDate: "2026-02-28", dueDate: "2026-03-05" });
+    expect(result.open).toMatchObject({ ref: "2026-02", closingDate: "2026-02-27", dueDate: "2026-03-05" });
   });
 });
 
 describe("cardInvoices com faturas pagas fora do sistema", () => {
-  // Fecha dia 3, vence dia 10. Compras importadas de faturas já pagas, sem o pagamento lançado.
+  // Melhor dia 3, vence dia 10. Compras importadas de faturas já pagas, sem o pagamento lançado.
   const card = { id: CARD, closingDay: 3, dueDay: 10 };
   const entries = [
     entry("expense", "2026-08-20", 40000, CARD), // fatura 2026-09
@@ -124,28 +128,86 @@ describe("cardInvoices com faturas pagas fora do sistema", () => {
 
   it("sem a marcação, tudo aparece como devido", () => {
     const result = cardInvoices(card, entries, "2026-10-25");
-    expect(result.closedUnpaid.map((i) => i.reference)).toEqual(["2026-09", "2026-10"]);
+    expect(result.closedUnpaid.map((i) => i.ref)).toEqual(["2026-09", "2026-10"]);
   });
 
   it("faturas marcadas como pagas não ficam em aberto (depois do vencimento)", () => {
-    const settled = { ...card, settledReferences: new Set(["2026-09", "2026-10"]) };
+    const settled = { ...card, settledRefs: new Set(["2026-09", "2026-10"]) };
     const result = cardInvoices(settled, entries, "2026-10-25");
     expect(result.closedUnpaid).toEqual([]);
-    expect(result.open).toMatchObject({ reference: "2026-11", remainingCents: 5000 });
+    expect(result.open).toMatchObject({ ref: "2026-11", remainingCents: 5000 });
     expect(result.creditCents).toBe(0);
   });
 
   it("antes do vencimento a dívida ainda existia", () => {
-    const settled = { ...card, settledReferences: new Set(["2026-10"]) };
+    const settled = { ...card, settledRefs: new Set(["2026-10"]) };
     const result = cardInvoices(settled, entries, "2026-10-05");
-    expect(result.closedUnpaid.find((i) => i.reference === "2026-10")?.remainingCents).toBe(30000);
+    expect(result.closedUnpaid.find((i) => i.ref === "2026-10")?.remainingCents).toBe(30000);
   });
 
   it("pagamento lançado de fatura marcada não vira crédito na aberta", () => {
-    const settled = { ...card, settledReferences: new Set(["2026-09", "2026-10"]) };
+    const settled = { ...card, settledRefs: new Set(["2026-09", "2026-10"]) };
     const withPayment = [...entries, entry("transfer", "2026-09-10", 40000, BANK, CARD)];
     const result = cardInvoices(settled, withPayment, "2026-10-25");
     expect(result.creditCents).toBe(0);
     expect(result.open.remainingCents).toBe(5000);
+  });
+});
+
+describe("cardInvoices com a fatura gravada no lançamento (invoice_ref)", () => {
+  // Melhor dia 26 (fecha 25), vence dia 5 do mês seguinte.
+  const card = { id: CARD, closingDay: 26, dueDay: 5 };
+
+  it("usa a fatura gravada, sem recalcular pela data", () => {
+    const entries = [
+      entry("expense", "2026-11-10", 10000, CARD, null, "2026-11"),
+      // Parcela 5/6 de compra de julho: a data é 20/11, mas o banco pôs na fatura de novembro.
+      entry("expense", "2026-11-20", 5000, CARD, null, "2026-11"),
+      // Importada: comprada em 27/10 mas o arquivo diz fatura de novembro (seria a mesma pelo cálculo).
+      entry("expense", "2026-10-27", 2000, CARD, null, "2026-11"),
+      // Data de 24/11 mas gravada na fatura de dezembro (ex.: banco adiou o fechamento).
+      entry("expense", "2026-11-24", 3000, CARD, null, "2026-12"),
+    ];
+    const result = cardInvoices(card, entries, "2026-11-12");
+    expect(result.open).toMatchObject({ ref: "2026-11", chargesCents: 17000 });
+    expect(result.invoices.find((i) => i.ref === "2026-12")?.chargesCents).toBe(3000);
+  });
+
+  it("sem fatura gravada, calcula pela data (lançamentos antigos)", () => {
+    const result = cardInvoices(card, [entry("expense", "2026-11-26", 1000, CARD)], "2026-11-26");
+    expect(result.open).toMatchObject({ ref: "2026-12", chargesCents: 1000 });
+  });
+
+  it("pagamento com fatura gravada quita essa fatura primeiro", () => {
+    const entries = [
+      entry("expense", "2026-09-10", 20000, CARD, null, "2026-09"),
+      entry("expense", "2026-10-10", 30000, CARD, null, "2026-10"),
+      // Paga a de outubro (venceu 03/11) sem ter pago a de setembro: FIFO puro abateria setembro.
+      entry("transfer", "2026-11-02", 30000, BANK, CARD, "2026-10"),
+    ];
+    const result = cardInvoices(card, entries, "2026-11-12");
+    expect(result.closedUnpaid.map((i) => [i.ref, i.remainingCents])).toEqual([["2026-09", 20000]]);
+    expect(result.invoices.find((i) => i.ref === "2026-10")).toMatchObject({ paidCents: 30000, remainingCents: 0 });
+  });
+
+  it("sobra do pagamento com fatura vai para as outras (FIFO)", () => {
+    const entries = [
+      entry("expense", "2026-09-10", 20000, CARD, null, "2026-09"),
+      entry("expense", "2026-10-10", 30000, CARD, null, "2026-10"),
+      entry("transfer", "2026-11-02", 45000, BANK, CARD, "2026-10"),
+    ];
+    const result = cardInvoices(card, entries, "2026-11-12");
+    expect(result.invoices.find((i) => i.ref === "2026-09")).toMatchObject({ paidCents: 15000, remainingCents: 5000 });
+    expect(result.creditCents).toBe(0);
+  });
+
+  it("limite comprometido = tudo o que falta pagar, inclusive faturas futuras", () => {
+    const entries = [
+      entry("expense", "2026-11-10", 10000, CARD, null, "2026-11"),
+      entry("expense", "2026-12-10", 10000, CARD, null, "2026-12"),
+      entry("expense", "2027-01-10", 10000, CARD, null, "2027-01"),
+      entry("transfer", "2026-11-11", 4000, BANK, CARD), // adiantado
+    ];
+    expect(cardInvoices(card, entries, "2026-11-12").limitUsedCents).toBe(26000);
   });
 });

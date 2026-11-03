@@ -1,13 +1,15 @@
 import { addDays, compareYM, daysInMonth, monthRange, parseISODate, weekRange, yearMonthOf, type YearMonth } from "./dates";
-import { type DateRange, inRange, type LedgerEntry } from "./ledger";
+import { type DateRange, entriesInMonth, inRange, type LedgerEntry, type MonthOf, purchaseMonthOf } from "./ledger";
 
 // Regras de orçamento.
 //
-// - Gasto considerado = despesas (type "expense") pela data da compra (occurredOn).
+// - Gasto considerado = despesas (type "expense"). No mensal, o mês de cada despesa vem de
+//   `monthOf`: pela data da compra (padrão; cada parcela no mês da própria data) ou, na visão
+//   "Por fatura", o cartão conta no mês da fatura (lib/finance/spending-view).
 //   Transferências (inclusive pagamento de fatura) e receitas nunca contam: o gasto
-//   no cartão já foi contado na compra. Cada parcela conta no mês da própria data.
+//   no cartão já foi contado na compra.
 // - Mensal: total da casa (sem categoria) ou por categoria, no mês.
-// - Semanal: por cartão, semana de segunda a domingo (datas em America/Sao_Paulo).
+// - Semanal: por cartão, semana de segunda a domingo, sempre pela data da compra.
 // - Status: ok (< 80%), atenção (80% a 100%), estourado (> 100%).
 
 export type BudgetPeriod = "monthly" | "weekly";
@@ -67,6 +69,23 @@ export function expenseSpent(entries: readonly LedgerEntry[], filter: SpentFilte
   return total;
 }
 
+// Despesas que contam no mês (pela visão), opcionalmente só de uma categoria.
+export function monthExpenseSpent(
+  entries: readonly LedgerEntry[],
+  month: YearMonth,
+  { categoryId, monthOf = purchaseMonthOf }: { categoryId?: string | null; monthOf?: MonthOf } = {},
+): number {
+  let total = 0;
+  for (const entry of entriesInMonth(entries, month, monthOf)) {
+    if (entry.type !== "expense") continue;
+    if (categoryId && entry.categoryId !== categoryId) continue;
+    total += entry.amountCents;
+  }
+  return total;
+}
+
+export type BudgetContext = { month: YearMonth; today: string; monthOf?: MonthOf };
+
 // Período avaliado: o mês selecionado (mensal) ou a semana de `today` (semanal).
 export function budgetRange(budget: Pick<BudgetRule, "period">, { month, today }: { month: YearMonth; today: string }) {
   return budget.period === "weekly" ? weekRange(today) : monthRange(month);
@@ -74,24 +93,19 @@ export function budgetRange(budget: Pick<BudgetRule, "period">, { month, today }
 
 export type EvaluatedBudget = BudgetRule & { scope: BudgetScope; range: DateRange } & BudgetProgress;
 
-export function evaluateBudget(
-  budget: BudgetRule,
-  entries: readonly LedgerEntry[],
-  context: { month: YearMonth; today: string },
-): EvaluatedBudget {
+export function evaluateBudget(budget: BudgetRule, entries: readonly LedgerEntry[], context: BudgetContext): EvaluatedBudget {
   const range = budgetRange(budget, context);
-  const spent = expenseSpent(entries, {
-    ...range,
-    categoryId: budget.categoryId,
-    accountId: budget.period === "weekly" ? budget.accountId : null,
-  });
+  const spent =
+    budget.period === "weekly"
+      ? expenseSpent(entries, { ...range, accountId: budget.accountId })
+      : monthExpenseSpent(entries, context.month, { categoryId: budget.categoryId, monthOf: context.monthOf });
   return { ...budget, scope: budgetScope(budget), range, ...budgetStatus(spent, budget.limitCents) };
 }
 
 export function evaluateBudgets(
   budgets: readonly BudgetRule[],
   entries: readonly LedgerEntry[],
-  context: { month: YearMonth; today: string },
+  context: BudgetContext,
 ): EvaluatedBudget[] {
   return budgets.map((budget) => evaluateBudget(budget, entries, context));
 }
@@ -119,12 +133,17 @@ export type MonthProjection =
 // - `daysElapsed` inclui hoje (no dia 15, 15 dias).
 // - No dia 1 não projeta (um mercado no dia 1 viraria 30 mercados).
 // - Nunca fica abaixo do que já está lançado no mês (ex.: parcelas com data futura).
+// - Na visão "Por fatura", o que conta no mês mas tem data anterior a ele (compras do fim do mês
+//   passado e parcelas antigas na fatura) entra fixo, sem ser extrapolado.
 export function monthProjection(
   entries: readonly LedgerEntry[],
-  { month, today, categoryId }: { month: YearMonth; today: string; categoryId?: string | null },
+  { month, today, categoryId, monthOf = purchaseMonthOf }: BudgetContext & { categoryId?: string | null },
 ): MonthProjection {
   const range = monthRange(month);
-  const monthSpent = expenseSpent(entries, { ...range, categoryId });
+  const inMonth = entriesInMonth(entries, month, monthOf).filter(
+    (e) => e.type === "expense" && (!categoryId || e.categoryId === categoryId),
+  );
+  const monthSpent = inMonth.reduce((sum, e) => sum + e.amountCents, 0);
   const todayYM = yearMonthOf(today);
   const cmp = compareYM(month, todayYM);
   if (cmp < 0) return { kind: "past", projectedCents: monthSpent };
@@ -133,9 +152,14 @@ export function monthProjection(
   const day = parseISODate(today)!.day;
   if (day === 1) return { kind: "too-early" };
   const total = daysInMonth(month.year, month.month);
-  const spentToDate = expenseSpent(entries, { from: range.from, to: today, categoryId });
+  let carriedIn = 0;
+  let spentToDate = 0;
+  for (const e of inMonth) {
+    if (e.occurredOn < range.from) carriedIn += e.amountCents;
+    else if (e.occurredOn <= today) spentToDate += e.amountCents;
+  }
   // Arredonda para o centavo mais próximo; inteiros até aqui.
-  const paced = Math.round((spentToDate * total) / day);
+  const paced = carriedIn + Math.round((spentToDate * total) / day);
   return { kind: "current", projectedCents: Math.max(paced, monthSpent), daysElapsed: day, daysInMonth: total };
 }
 

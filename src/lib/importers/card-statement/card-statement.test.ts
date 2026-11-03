@@ -263,11 +263,50 @@ describe("planCardImport", () => {
       ["2026-03-10", 71103, 71103, 0],
       ["2026-04-10", 77240, 77240, 0],
     ]);
-    expect(plan.statements[0]!.closingDate).toBe("2026-03-03");
+    // Melhor dia 3 → fecha na véspera; a fatura que vence 10/03 é a "2026-03".
+    expect(plan.statements[0]).toMatchObject({ closingDate: "2026-03-02", invoiceRef: "2026-03" });
 
     const [statement] = parseCardStatement(FATURA_1);
     const tampered = { statements: [{ ...statement!, totalCents: 80000 }] };
     expect(planCardImport(input({ files: [tampered] })).statements[0]!.differenceCents).toBe(80000 - 71103);
+  });
+
+  it("cada linha fica na fatura do ARQUIVO; parcelas futuras nas faturas seguintes", () => {
+    const plan = planCardImport(input({ files: parseAll(FATURA_1, FATURA_2) }));
+    const fileLines = plan.lines.filter((l) => !l.future && l.kind !== "payment");
+    expect(new Set(fileLines.filter((l) => l.statementIndex === 0).map((l) => l.invoiceRef))).toEqual(new Set(["2026-03"]));
+    expect(new Set(fileLines.filter((l) => l.statementIndex === 1).map((l) => l.invoiceRef))).toEqual(new Set(["2026-04"]));
+    // Parcela de compra antiga (data original em janeiro) fica na fatura em que apareceu.
+    const [m3] = find(plan, "Moveis Inventadoscuritibabra", 3).filter((l) => !l.future);
+    expect(m3).toMatchObject({ purchaseDate: "2026-01-12", invoiceRef: "2026-04" });
+
+    // Só a fatura de março: Loja 1/3 está nela; 2/3 e 3/3 são geradas em abril e maio.
+    const single = planCardImport(input());
+    expect(find(single, "Mp *Lojaficticiacuritibabra").map((l) => [l.installment!.number, l.future, l.invoiceRef])).toEqual([
+      [1, false, "2026-03"],
+      [2, true, "2026-04"],
+      [3, true, "2026-05"],
+    ]);
+  });
+
+  it("fatura do arquivo mesmo quando o melhor dia cadastrado diria outra", () => {
+    // Melhor dia 25, vence dia 10: o arquivo que vence 10/03 é a fatura de fevereiro (fecha 24/02);
+    // pelo cálculo, compras de 25/02 em diante iriam para março — mas ficam na do arquivo.
+    const plan = planCardImport(input({ card: { closingDay: 25, dueDay: 10 } }));
+    expect(plan.statements[0]!.invoiceRef).toBe("2026-02");
+    const fileLines = plan.lines.filter((l) => !l.future && l.kind !== "payment");
+    expect(fileLines.every((l) => l.invoiceRef === "2026-02")).toBe(true);
+    expect(plan.statements[0]!.otherInvoiceCount).toBeGreaterThan(0);
+  });
+
+  it("pagamento lançado como transferência paga a fatura anterior à do arquivo", () => {
+    const plan = planCardImport(input({ paymentAccountId: "00000000-0000-4000-8000-0000000000aa" }));
+    expect(find(plan, "Pagamento Com Saldo")[0]).toMatchObject({ type: "transfer", invoiceRef: "2026-02", include: true });
+  });
+
+  it("sem ciclo cadastrado, a fatura é o mês anterior ao vencimento", () => {
+    const plan = planCardImport(input({ card: null }));
+    expect(plan.statements[0]).toMatchObject({ invoiceRef: "2026-02", closingDate: null });
   });
 
   it("avisa linhas que o fechamento cadastrado põe em outra fatura", () => {

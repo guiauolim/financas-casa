@@ -1,6 +1,8 @@
 import { type BalanceAccount, type CardAccount, cardInvoices, totalBalance } from "./balances";
+import { invoiceFor } from "./billing";
 import { addMonthsYM, compareYM, monthRange, type YearMonth, yearMonthOf } from "./dates";
 import type { LedgerEntry } from "./ledger";
+import { entryInvoiceRef } from "./spending-view";
 import { investedValueAt, type PortfolioInvestment, type Snapshot, snapshotsByInvestment } from "./portfolio";
 
 // Patrimônio = saldo das contas + investimentos ativos − faturas em aberto.
@@ -20,10 +22,15 @@ export type NetWorth = {
   totalCents: number;
 };
 
-// Dívida do cartão numa data: fatura aberta + fechadas não pagas (só com lançamentos até a
-// data; compras parceladas futuras ainda não contam), menos crédito pago a mais.
+// Dívida do cartão numa data: fatura aberta + fechadas não pagas, menos crédito pago a mais.
+// Entram os lançamentos até a data e, no cartão, também os já gravados numa fatura aberta ou
+// fechada (ex.: parcela de compra antiga com data adiante, mas que o banco pôs na fatura atual).
+// Parcelas de faturas futuras ainda não contam.
 export function cardDebtAt(card: CardAccount, ledger: readonly LedgerEntry[], asOf: string): number {
-  const entries = ledger.filter((entry) => entry.occurredOn <= asOf);
+  const openRef = invoiceFor(asOf, card).ref;
+  const entries = ledger.filter(
+    (entry) => entry.occurredOn <= asOf || (entry.accountId === card.id && entryInvoiceRef(entry, card) <= openRef),
+  );
   const { open, closedUnpaid, creditCents } = cardInvoices(card, entries, asOf);
   return open.remainingCents + closedUnpaid.reduce((sum, i) => sum + i.remainingCents, 0) - creditCents;
 }

@@ -20,7 +20,7 @@ export async function loadFormOptions(
   return {
     accounts: accounts
       .filter((a) => !a.archived || keepAccounts.has(a.id))
-      .map(({ id, name, kind, closingDay, dueDay }) => ({ id, name, kind, closingDay, dueDay })),
+      .map(({ id, name, kind, closingDay, dueDay, invoiceNaming }) => ({ id, name, kind, closingDay, dueDay, invoiceNaming })),
     categories: categories
       .filter((c) => !c.archived || c.id === keep.categoryId)
       .map(({ id, name, type, householdDefault }) => ({ id, name, type, householdDefault })),

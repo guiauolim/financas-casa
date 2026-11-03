@@ -8,14 +8,15 @@ const entry = (
   amountCents: number,
   accountId: string,
   transferAccountId: string | null = null,
-): LedgerEntry => ({ type, occurredOn, amountCents, accountId, transferAccountId, categoryId: null });
+  invoiceRef: string | null = null,
+): LedgerEntry => ({ type, occurredOn, amountCents, accountId, transferAccountId, categoryId: null, invoiceRef });
 
 const card = { id: "card", closingDay: 5, dueDay: 12 };
 const ledger: LedgerEntry[] = [
   entry("income", "2026-10-01", 500000, "bank"),
-  entry("expense", "2026-10-10", 30000, "card"), // fatura que fecha em 05/11
+  entry("expense", "2026-10-10", 30000, "card"), // fatura "2026-11" (05/10 a 04/11)
   entry("transfer", "2026-11-12", 30000, "bank", "card"), // paga essa fatura
-  entry("expense", "2026-11-03", 20000, "card"), // ainda na fatura que fecha em 05/11
+  entry("expense", "2026-11-03", 20000, "card"), // ainda na fatura "2026-11" (já aberta em 31/10)
   entry("expense", "2026-11-20", 10000, "card"), // fatura seguinte
   entry("expense", "2026-12-20", 99900, "card"), // parcela futura
 ];
@@ -36,10 +37,19 @@ const input: NetWorthInput = {
 };
 
 describe("cardDebtAt", () => {
-  it("faturas em aberto até a data, sem compras futuras", () => {
-    expect(cardDebtAt(card, ledger, "2026-10-31")).toBe(30000);
-    expect(cardDebtAt(card, ledger, "2026-11-10")).toBe(50000); // fechada não paga + nada novo
+  it("faturas em aberto até a data, sem faturas futuras", () => {
+    // Em 31/10 a fatura aberta é a "2026-11": inclui a compra de 03/11, que já está nela (como uma
+    // parcela que o banco põe na fatura desde o início do ciclo). As de dezembro em diante não.
+    expect(cardDebtAt(card, ledger, "2026-10-31")).toBe(50000);
+    expect(cardDebtAt(card, ledger, "2026-11-10")).toBe(50000 + 10000); // fechada não paga + aberta (compra de 20/11)
     expect(cardDebtAt(card, ledger, "2026-11-30")).toBe(20000 + 10000 - 0); // pagamento FIFO quita a de 30000
+  });
+
+  it("parcela de compra antiga gravada na fatura aberta conta mesmo com data adiante", () => {
+    const parcel = [entry("expense", "2026-11-20", 7000, "card", null, "2026-11")];
+    expect(cardDebtAt(card, parcel, "2026-11-01")).toBe(7000);
+    const nextInvoice = [entry("expense", "2026-11-20", 7000, "card", null, "2026-12")];
+    expect(cardDebtAt(card, nextInvoice, "2026-11-01")).toBe(0);
   });
 
   it("crédito pago a mais reduz a dívida", () => {
@@ -53,8 +63,8 @@ describe("netWorthAt", () => {
     expect(netWorthAt("2026-10-31", input)).toEqual({
       accountsCents: 600000,
       investmentsCents: 200000 + 5000,
-      invoicesCents: 30000,
-      totalCents: 600000 + 205000 - 30000,
+      invoicesCents: 50000,
+      totalCents: 600000 + 205000 - 50000,
     });
   });
 
@@ -70,9 +80,9 @@ describe("netWorthForMonth", () => {
     const report = netWorthForMonth({ year: 2026, month: 11 }, "2026-11-30", input);
     expect(report.asOf).toBe("2026-11-30");
     expect(report.previousAsOf).toBe("2026-10-31");
-    // nov: 570000 + 210000 − 30000 = 750000; out: 775000
+    // nov: 570000 + 210000 − 30000 = 750000; out: 600000 + 205000 − 50000 = 755000
     expect(report.totalCents).toBe(750000);
-    expect(report.changeCents).toBe(750000 - 775000);
+    expect(report.changeCents).toBe(750000 - 755000);
   });
 
   it("mês passado usa o último dia do mês", () => {
@@ -91,7 +101,7 @@ describe("faturas pagas fora do sistema", () => {
     };
     const settled: NetWorthInput = {
       ...imported,
-      cards: [{ ...card, settledReferences: new Set(["2026-09", "2026-10"]) }],
+      cards: [{ ...card, settledRefs: new Set(["2026-09", "2026-10"]) }],
     };
     expect(netWorthAt("2026-10-20", imported).invoicesCents).toBe(1700000);
     const result = netWorthAt("2026-10-20", settled);

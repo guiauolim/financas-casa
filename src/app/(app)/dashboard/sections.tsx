@@ -22,12 +22,14 @@ import { MonthNav } from "@/components/month-nav";
 import { Panel } from "@/components/panel";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SpendingViewToggle, spendingViewNote } from "@/components/spending-view-toggle";
 import { projectedCents } from "@/lib/finance/budget";
 import { formatBRL } from "@/lib/finance/money";
 import { daysBetween, formatDayMonth, formatMonthLong, toYearMonth } from "@/lib/finance/dates";
 import type { InsightTone } from "@/lib/finance/insights";
 import { HOUSE, spentByToParam } from "@/lib/finance/spent-by";
-import { cn } from "@/lib/utils";
+import { capitalize, cn } from "@/lib/utils";
+import { invoiceParam } from "@/lib/validation/transactions";
 import { TransactionRows } from "../transacoes/transaction-rows";
 import { IncomeExpenseChart } from "./income-expense-chart";
 import { loadOverview, loadRecent, mesParam } from "./data";
@@ -43,16 +45,20 @@ const textLink =
 
 export async function MonthSelector(props: Props) {
   const mes = await mesOf(props);
-  const { month } = await loadOverview(mes);
+  const { month, view } = await loadOverview(mes);
   return (
     <Panel>
-      <MonthNav month={month} href={(m) => `/dashboard?mes=${m}`} />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <MonthNav month={month} href={(m) => `/dashboard?mes=${m}`} />
+        <SpendingViewToggle view={view} />
+      </div>
+      <p className="text-[13px] text-muted-foreground">{spendingViewNote(view)}</p>
     </Panel>
   );
 }
 
 export function MonthSelectorSkeleton() {
-  return <Skeleton className="h-[88px] w-full rounded-[14px]" />;
+  return <Skeleton className="h-[120px] w-full rounded-[14px]" />;
 }
 
 // ───────────────────────── KPIs ─────────────────────────
@@ -214,12 +220,12 @@ const MAX_CATEGORIES = 8;
 
 export async function CategorySpending(props: Props) {
   const mes = await mesOf(props);
-  const { categories } = await loadOverview(mes);
+  const { categories, view } = await loadOverview(mes);
   const shown = categories.slice(0, MAX_CATEGORIES);
   return (
     <Panel
       title="Gastos por categoria"
-      description="Despesas do mês pela data da compra."
+      description={view === "invoice" ? "Despesas do mês; no cartão, pela fatura." : "Despesas do mês pela data da compra."}
       actions={
         <Link href="/orcamentos" className={textLink}>
           Orçamentos <ArrowRight className="size-4" aria-hidden />
@@ -335,6 +341,8 @@ function dueLabel(today: string, dueDate: string) {
   return `vence em ${formatDayMonth(dueDate)}`;
 }
 
+const invoiceHref = (accountId: string, ref: string) => `/transacoes?fatura=${invoiceParam(accountId, ref)}`;
+
 export async function OpenInvoices(props: Props) {
   const mes = await mesOf(props);
   const { invoices, today } = await loadOverview(mes);
@@ -349,40 +357,58 @@ export async function OpenInvoices(props: Props) {
         </div>
       ) : (
         <ul className="flex flex-col divide-y divide-divider">
-          {invoices.map(({ account, open, closedUnpaid }) => (
-            <li key={account.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
-              <div className="flex items-center gap-3">
-                <span
-                  className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
-                  aria-hidden
+          {invoices.map(({ account, open, openName, closedUnpaid, closedNames, limitUsedCents }) => {
+            const limit = account.creditLimitCents;
+            const available = limit ? limit - limitUsedCents : null;
+            return (
+              <li key={account.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
+                <Link
+                  href={invoiceHref(account.id, open.ref)}
+                  className="-mx-2 flex min-h-11 items-center gap-3 rounded-lg px-2 py-1 hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
-                  <CreditCard className="size-4" strokeWidth={2} />
-                </span>
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <p className="truncate text-sm font-medium">{account.name}</p>
-                  <p className="text-[12px] text-muted-foreground">
-                    Fecha <span className="font-mono">{formatDayMonth(open.closingDate)}</span> · vence{" "}
-                    <span className="font-mono">{formatDayMonth(open.dueDate)}</span>
-                  </p>
-                </div>
-                <Money cents={open.remainingCents} className="text-sm font-medium" />
-              </div>
-              {closedUnpaid.map((invoice) => {
-                const late = invoice.dueDate < today;
-                return (
-                  <p
-                    key={invoice.reference}
-                    className={cn(
-                      "ml-11 rounded-lg px-3 py-2 text-[13px] font-medium",
-                      late ? "bg-danger/10 text-danger" : "bg-[#FBEBD9] text-warning-foreground",
-                    )}
+                  <span
+                    className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+                    aria-hidden
                   >
-                    Fatura fechada: <Money cents={invoice.remainingCents} /> a pagar · {dueLabel(today, invoice.dueDate)}
+                    <CreditCard className="size-4" strokeWidth={2} />
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-sm font-medium">{account.name}</span>
+                    <span className="text-[12px] text-muted-foreground">
+                      {capitalize(openName)} · fecha <span className="font-mono">{formatDayMonth(open.closingDate)}</span> · vence{" "}
+                      <span className="font-mono">{formatDayMonth(open.dueDate)}</span>
+                    </span>
+                  </span>
+                  <Money cents={open.remainingCents} className="text-sm font-medium" />
+                </Link>
+                {closedUnpaid.map((invoice) => {
+                  const late = invoice.dueDate < today;
+                  return (
+                    <Link
+                      key={invoice.ref}
+                      href={invoiceHref(account.id, invoice.ref)}
+                      className={cn(
+                        "ml-11 flex min-h-11 items-center rounded-lg px-3 py-2 text-[13px] font-medium focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+                        late ? "bg-danger/10 text-danger" : "bg-[#FBEBD9] text-warning-foreground",
+                      )}
+                    >
+                      <span>
+                        {capitalize(closedNames[invoice.ref] ?? "fatura")} fechada:{" "}
+                        <Money cents={invoice.remainingCents} /> a pagar · {dueLabel(today, invoice.dueDate)}
+                      </span>
+                    </Link>
+                  );
+                })}
+                {limit && available !== null ? (
+                  <p className="ml-11 text-[12px] text-muted-foreground">
+                    Limite disponível{" "}
+                    <Money cents={available} className={cn("font-medium", available < 0 ? "text-danger" : "text-foreground")} />{" "}
+                    de <Money cents={limit} />
                   </p>
-                );
-              })}
-            </li>
-          ))}
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       )}
     </Panel>

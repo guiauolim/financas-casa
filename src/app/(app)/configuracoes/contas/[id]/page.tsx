@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { z } from "zod";
 import { FormSkeleton, Panel } from "@/components/panel";
 import { requireActor } from "@/lib/auth/session";
+import { todayInSaoPaulo } from "@/lib/finance/dates";
 import { getAccount } from "@/lib/services/accounts";
 import { listMembers } from "@/lib/services/households";
 import { createClient } from "@/lib/supabase/server";
@@ -31,7 +32,7 @@ async function EditAccount({ params }: Pick<PageProps<"/configuracoes/contas/[id
   if (!account) notFound();
   return (
     <Panel title={`Editar ${account.name}`} className="max-w-2xl">
-      <AccountForm account={account} members={members} />
+      <AccountForm account={account} members={members} today={todayInSaoPaulo()} />
     </Panel>
   );
 }

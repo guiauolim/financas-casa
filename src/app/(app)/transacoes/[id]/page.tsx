@@ -54,6 +54,7 @@ async function EditTransaction({ params }: Pick<PageProps<"/transacoes/[id]">, "
           categoryId: transaction.category?.id ?? null,
           installment: transaction.installment,
           spentBy: transaction.spentBy,
+          invoiceRef: transaction.invoiceRef,
         }}
         accounts={accounts}
         categories={categories}

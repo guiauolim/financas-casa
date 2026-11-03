@@ -19,7 +19,7 @@ const context = cache(async (mes: string | undefined) => {
 
 export const loadOverview = cache(async (mes: string | undefined) => {
   const { actor, db, today, month } = await context(mes);
-  return getMonthOverview(db, { householdId: actor.householdId, month, today });
+  return getMonthOverview(db, { householdId: actor.householdId, month, today, view: actor.profile.spendingView });
 });
 
 export const loadRecent = cache(async (mes: string | undefined) => {

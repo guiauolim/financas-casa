@@ -1,8 +1,10 @@
 import "server-only";
-import { monthRange, type YearMonth } from "@/lib/finance/dates";
+import { type CardCycle, refForNameMonth, transactionInvoiceRefs, addMonthsToRef } from "@/lib/finance/billing";
+import { monthRange, toYearMonth, type YearMonth } from "@/lib/finance/dates";
 import type { LedgerEntry } from "@/lib/finance/ledger";
 import { planInstallments } from "@/lib/finance/installments";
 import { defaultSpentBy, type SpentBy } from "@/lib/finance/spent-by";
+import type { SpendingView } from "@/lib/finance/spending-view";
 import type { AccountKind } from "@/lib/validation/accounts";
 import type { TxType } from "@/lib/validation/categories";
 import type { Scope, TransactionInput } from "@/lib/validation/transactions";
@@ -24,6 +26,7 @@ export type Transaction = {
   spentBy: SpentBy;
   spentByName: string | null;
   cardLastDigits: string | null;
+  invoiceRef: string | null; // fatura do cartão ("YYYY-MM" do fechamento) ou paga (pagamento)
   deletedAt: string | null;
   account: { id: string; name: string; kind: AccountKind };
   transferAccount: { id: string; name: string; kind: AccountKind } | null;
@@ -33,7 +36,7 @@ export type Transaction = {
 };
 
 const SELECT = `
-  id, type, amount_cents, description, occurred_on, source, created_by, spent_by, card_last_digits, deleted_at, created_at,
+  id, type, amount_cents, description, occurred_on, source, created_by, spent_by, card_last_digits, invoice_ref, deleted_at, created_at,
   installment_group_id, installment_number, installment_total,
   account:accounts!transactions_account_id_fkey(id, name, kind),
   transfer_account:accounts!transactions_transfer_account_id_fkey(id, name, kind),
@@ -52,6 +55,7 @@ type Row = {
   created_by: string | null;
   spent_by: string | null;
   card_last_digits: string | null;
+  invoice_ref: string | null;
   deleted_at: string | null;
   installment_group_id: string | null;
   installment_number: number | null;
@@ -76,6 +80,7 @@ function toTransaction(row: Row): Transaction {
     spentBy: row.spent_by,
     spentByName: row.spender?.display_name ?? null,
     cardLastDigits: row.card_last_digits,
+    invoiceRef: row.invoice_ref,
     deletedAt: row.deleted_at,
     account: row.account ?? { id: "", name: "—", kind: "checking" },
     transferAccount: row.transfer_account,
@@ -99,21 +104,59 @@ export type ListFilters = {
   categoryId?: string;
   // De quem é: id do membro, null = só Casa, undefined = todos.
   spentBy?: SpentBy;
+  // "invoice": lançamentos no cartão entram pelo mês da fatura (nome do cartão); o resto pela data.
+  view?: SpendingView;
+  // Filtro "Fatura": tudo o que está nesta fatura do cartão (inclusive parcelas de compras antigas)
+  // e os pagamentos feitos para ela. Ignora `month` e `view`.
+  invoice?: { accountId: string; ref: string };
 };
 
-export async function listTransactions(db: Db, filters: ListFilters): Promise<Transaction[]> {
+type CardForView = { id: string; naming: "closing" | "due" } & CardCycle;
+
+async function listViewCards(db: Db, householdId: string): Promise<CardForView[]> {
+  const { data, error } = await db
+    .from("accounts")
+    .select("id, closing_day, due_day, invoice_naming")
+    .eq("household_id", householdId)
+    .eq("kind", "credit_card");
+  throwIf(error);
+  return (data ?? []).flatMap((a) =>
+    a.closing_day && a.due_day
+      ? [{ id: a.id, closingDay: a.closing_day, dueDay: a.due_day, naming: a.invoice_naming === "due" ? ("due" as const) : ("closing" as const) }]
+      : [],
+  );
+}
+
+// Condição (sintaxe do PostgREST) do que conta no mês: fora do cartão pela data; no cartão,
+// pela fatura cujo nome é o mês (visão "Por fatura").
+async function monthCondition(db: Db, filters: ListFilters): Promise<string> {
   const { from, to } = monthRange(filters.month);
-  let query = db
-    .from("transactions")
-    .select(SELECT)
-    .eq("household_id", filters.householdId)
-    .is("deleted_at", null)
-    .gte("occurred_on", from)
-    .lte("occurred_on", to);
+  const byDate = `occurred_on.gte.${from},occurred_on.lte.${to}`;
+  if (filters.view !== "invoice") return `and(${byDate})`;
+  const cards = await listViewCards(db, filters.householdId);
+  if (cards.length === 0) return `and(${byDate})`;
+  const monthKey = toYearMonth(filters.month);
+  return `or(${[
+    `and(${byDate},account_id.not.in.(${cards.map((c) => c.id).join(",")}))`,
+    ...cards.map((card) => `and(account_id.eq.${card.id},invoice_ref.eq.${refForNameMonth(monthKey, card.naming, card)})`),
+  ].join(",")})`;
+}
+
+export async function listTransactions(db: Db, filters: ListFilters): Promise<Transaction[]> {
+  let query = db.from("transactions").select(SELECT).eq("household_id", filters.householdId).is("deleted_at", null);
+  const conditions: string[] = [];
+  if (filters.invoice) {
+    const { accountId, ref } = filters.invoice;
+    query = query.eq("invoice_ref", ref);
+    conditions.push(`or(account_id.eq.${accountId},transfer_account_id.eq.${accountId})`);
+  } else {
+    conditions.push(await monthCondition(db, filters));
+  }
   // Filtro por conta inclui transferências que chegam nela (ex.: pagamento de fatura no cartão).
   if (filters.accountId) {
-    query = query.or(`account_id.eq.${filters.accountId},transfer_account_id.eq.${filters.accountId}`);
+    conditions.push(`or(account_id.eq.${filters.accountId},transfer_account_id.eq.${filters.accountId})`);
   }
+  query = query.or(`and(${conditions.join(",")})`);
   if (filters.categoryId) query = query.eq("category_id", filters.categoryId);
   if (filters.spentBy === null) query = query.is("spent_by", null).neq("type", "transfer");
   else if (filters.spentBy) query = query.eq("spent_by", filters.spentBy);
@@ -179,7 +222,7 @@ export async function listLedger(db: Db, { householdId }: { householdId: string 
   for (let page = 0; ; page++) {
     const { data, error } = await db
       .from("transactions")
-      .select("id, type, amount_cents, occurred_on, account_id, transfer_account_id, category_id, spent_by")
+      .select("id, type, amount_cents, occurred_on, account_id, transfer_account_id, category_id, spent_by, invoice_ref")
       .eq("household_id", householdId)
       .is("deleted_at", null)
       .order("occurred_on")
@@ -195,6 +238,7 @@ export async function listLedger(db: Db, { householdId }: { householdId: string 
         transferAccountId: row.transfer_account_id,
         categoryId: row.category_id,
         spentBy: row.spent_by,
+        invoiceRef: row.invoice_ref,
       });
     }
     if ((data?.length ?? 0) < LEDGER_PAGE) return entries;
@@ -240,13 +284,13 @@ async function assertReferences(
   householdId: string,
   input: TransactionInput,
   current?: Transaction,
-): Promise<{ categoryHouseholdDefault: boolean }> {
+): Promise<{ categoryHouseholdDefault: boolean; cycles: Map<string, CardCycle | null> }> {
   const accountIds = [input.accountId, input.type === "transfer" ? input.transferAccountId : null].filter(
     (id): id is string => Boolean(id),
   );
   const { data: accounts, error } = await db
     .from("accounts")
-    .select("id, kind, archived")
+    .select("id, kind, archived, closing_day, due_day")
     .eq("household_id", householdId)
     .in("id", accountIds);
   throwIf(error);
@@ -257,6 +301,13 @@ async function assertReferences(
     if (!account) throw new ServiceError("Conta não encontrada.", field);
     if (account.archived && !keep.has(id)) throw new ServiceError("Esta conta está arquivada.", field);
   }
+  // Ciclo dos cartões envolvidos (para a fatura do lançamento).
+  const cycles = new Map<string, CardCycle | null>(
+    (accounts ?? []).map((a) => [
+      a.id,
+      a.kind === "credit_card" && a.closing_day && a.due_day ? { closingDay: a.closing_day, dueDay: a.due_day } : null,
+    ]),
+  );
 
   const categoryId = input.type === "transfer" ? undefined : input.categoryId;
   let categoryHouseholdDefault = false;
@@ -287,7 +338,18 @@ async function assertReferences(
     throwIf(memberError);
     if (!member) throw new ServiceError("Escolha um membro da casa.", "spentBy");
   }
-  return { categoryHouseholdDefault };
+  return { categoryHouseholdDefault, cycles };
+}
+
+// Faturas de um lançamento (uma por linha): regra em lib/finance/billing (transactionInvoiceRefs).
+function invoiceRefsFor(input: TransactionInput, cycles: Map<string, CardCycle | null>, count = 1) {
+  return transactionInvoiceRefs({
+    type: input.type,
+    occurredOn: input.occurredOn,
+    count,
+    account: cycles.get(input.accountId) ?? null,
+    transferTo: input.type === "transfer" ? (cycles.get(input.transferAccountId) ?? null) : null,
+  });
 }
 
 // De quem é: transferência não é de ninguém; sem escolha explícita vale a regra única
@@ -319,7 +381,7 @@ export async function createTransaction(
   input: TransactionInput,
   { source = "web" }: { source?: TxSource } = {},
 ): Promise<CreatedTransactions> {
-  const { categoryHouseholdDefault } = await assertReferences(db, actor.householdId, input);
+  const { categoryHouseholdDefault, cycles } = await assertReferences(db, actor.householdId, input);
   const base = {
     ...fields(input),
     spent_by: resolveSpentBy(input, categoryHouseholdDefault, actor.userId),
@@ -330,17 +392,20 @@ export async function createTransaction(
   const count = input.type === "expense" ? input.installments : 1;
 
   const groupId = count > 1 ? crypto.randomUUID() : null;
+  // Fatura gravada no lançamento; parcelas em faturas consecutivas.
+  const refs = invoiceRefsFor(input, cycles, count);
   const rows =
     count > 1
-      ? planInstallments(input.amountCents, count, input.occurredOn).map((p) => ({
+      ? planInstallments(input.amountCents, count, input.occurredOn).map((p, i) => ({
           ...base,
           amount_cents: p.amountCents,
           occurred_on: p.occurredOn,
           installment_group_id: groupId,
           installment_number: p.number,
           installment_total: p.total,
+          invoice_ref: refs[i] ?? null,
         }))
-      : [{ ...base, amount_cents: input.amountCents, occurred_on: input.occurredOn }];
+      : [{ ...base, amount_cents: input.amountCents, occurred_on: input.occurredOn, invoice_ref: refs[0] ?? null }];
 
   const { data, error } = await db.from("transactions").insert(rows).select("id");
   throwIf(error);
@@ -350,6 +415,10 @@ export async function createTransaction(
 // Edita um lançamento. Em parcelas, `scope = "following"` aplica conta, categoria,
 // descrição e valor da parcela também às parcelas seguintes do grupo; a data só
 // muda na parcela editada (cada parcela tem o seu mês).
+//
+// Fatura (invoice_ref): fica a gravada (ex.: a do arquivo importado), a não ser que mudem a
+// data, a conta, o destino ou o tipo — aí é recalculada pela nova data (a tela avisa). Se a
+// conta mudar nas parcelas seguintes, elas seguem em faturas consecutivas a partir desta.
 export async function updateTransaction(
   db: Db,
   actor: Actor,
@@ -362,29 +431,58 @@ export async function updateTransaction(
   if (current.installment && input.type !== "expense") {
     throw new ServiceError("Parcelas são sempre despesas.", "type");
   }
-  const { categoryHouseholdDefault } = await assertReferences(db, actor.householdId, input, current);
+  const { categoryHouseholdDefault, cycles } = await assertReferences(db, actor.householdId, input, current);
 
   const shared = {
     ...fields(input),
     spent_by: resolveSpentBy(input, categoryHouseholdDefault, actor.userId, current.spentBy),
     amount_cents: input.amountCents,
   };
+  const accountChanged =
+    input.accountId !== current.account.id ||
+    input.type !== current.type ||
+    (input.type === "transfer" ? input.transferAccountId : null) !== (current.transferAccount?.id ?? null);
+  const recompute = accountChanged || input.occurredOn !== current.occurredOn;
+  const invoiceRef = recompute ? (invoiceRefsFor(input, cycles)[0] ?? null) : current.invoiceRef;
   const { error } = await db
     .from("transactions")
-    .update({ ...shared, occurred_on: input.occurredOn })
+    .update({ ...shared, occurred_on: input.occurredOn, invoice_ref: invoiceRef })
     .eq("household_id", actor.householdId)
     .eq("id", transactionId);
   throwIf(error);
 
   if (scope === "following" && current.installment) {
-    const { error: followingError } = await db
-      .from("transactions")
-      .update(shared)
-      .eq("household_id", actor.householdId)
-      .eq("installment_group_id", current.installment.groupId)
-      .gt("installment_number", current.installment.number)
-      .is("deleted_at", null);
+    const following = () =>
+      db
+        .from("transactions")
+        .update(shared)
+        .eq("household_id", actor.householdId)
+        .eq("installment_group_id", current.installment!.groupId)
+        .gt("installment_number", current.installment!.number)
+        .is("deleted_at", null);
+    const { error: followingError } = await following();
     throwIf(followingError);
+
+    // Conta trocada: as próximas parcelas vão para as faturas seguintes do novo cartão.
+    if (accountChanged) {
+      const { data: rows, error: rowsError } = await db
+        .from("transactions")
+        .select("id, installment_number")
+        .eq("household_id", actor.householdId)
+        .eq("installment_group_id", current.installment.groupId)
+        .gt("installment_number", current.installment.number)
+        .is("deleted_at", null);
+      throwIf(rowsError);
+      for (const row of rows ?? []) {
+        const ref = invoiceRef ? addMonthsToRef(invoiceRef, (row.installment_number ?? 0) - current.installment.number) : null;
+        const { error: refError } = await db
+          .from("transactions")
+          .update({ invoice_ref: ref })
+          .eq("household_id", actor.householdId)
+          .eq("id", row.id);
+        throwIf(refError);
+      }
+    }
   }
 }
 

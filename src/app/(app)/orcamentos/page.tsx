@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/page-header";
 import { Panel } from "@/components/panel";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SpendingViewToggle } from "@/components/spending-view-toggle";
 import { WeekBars } from "@/components/week-bars";
 import { requireActor } from "@/lib/auth/session";
 import { projectedCents } from "@/lib/finance/budget";
@@ -115,8 +116,9 @@ async function Budgets({ searchParams }: Pick<PageProps<"/orcamentos">, "searchP
   const db = await createClient();
   const today = todayInSaoPaulo();
   const month = monthFromParam((await searchParams).mes, today);
+  const view = actor.profile.spendingView;
   const [report, accounts] = await Promise.all([
-    getBudgetStatus(db, { householdId: actor.householdId, month, today }),
+    getBudgetStatus(db, { householdId: actor.householdId, month, today, view }),
     listAccounts(db, { householdId: actor.householdId }),
   ]);
   const hasCards = accounts.some((a) => a.kind === "credit_card");
@@ -126,9 +128,15 @@ async function Budgets({ searchParams }: Pick<PageProps<"/orcamentos">, "searchP
   return (
     <>
       <Panel>
-        <MonthNav month={month} href={(m) => `/orcamentos?mes=${m}`} />
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <MonthNav month={month} href={(m) => `/orcamentos?mes=${m}`} />
+          <SpendingViewToggle view={view} />
+        </div>
         <p className="text-[13px] text-muted-foreground">
-          Conta o que foi gasto pela data da compra. Transferências, pagamentos de fatura e receitas não entram.
+          {view === "invoice"
+            ? "Conta o que foi gasto no mês; no cartão, pela fatura (inclusive parcelas de compras antigas). O limite semanal segue a data da compra."
+            : "Conta o que foi gasto pela data da compra."}{" "}
+          Transferências, pagamentos de fatura e receitas não entram.
         </p>
       </Panel>
 
