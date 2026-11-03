@@ -138,6 +138,19 @@ pessoa (card_holders, mesmo cartão), classificação por comércio com regras a
   lançamento, filtro "Pessoa" por `spent_by`, card "Por pessoa" na Visão geral, "Gasto da casa por padrão"
   nas categorias e Configurações → Regras de categoria
 
+## Fase 4.6 — Fatura gravada no lançamento + visão "Por fatura" ✅ concluída
+**Entregue** (branch `fix/fatura-referencia`):
+- Migration `0008_fatura_referencia.sql`: `transactions.invoice_ref` ("YYYY-MM" do fechamento),
+  `card_statement_imports.invoice_ref`, `accounts.invoice_naming` (fechamento | vencimento),
+  `profiles.spending_view`; backfill (importadas pela fatura do arquivo, parcelas em sequência, o resto
+  pelo cálculo), trigger de segurança e `apply_card_import` gravando a fatura do arquivo
+- `lib/finance/billing` (melhor dia de compra, chave da fatura, nome, parcelas consecutivas, pagamento),
+  `lib/finance/spending-view` (visões "Por data da compra" / "Por fatura" via `monthOf`)
+- `lib/services/card-invoices`: `getCardInvoice`, `findCardInvoicesByName` (base de "quanto está a fatura
+  de novembro?" no bot), opções do filtro "Fatura"
+- Toggle de visão (lembrado por usuário) na Visão geral, Orçamentos e Transações; filtro "Fatura" em
+  Transações; faturas abertas com nome, link e limite disponível; "Melhor dia de compra" no cartão
+
 ---
 
 # Etapa B — WhatsApp

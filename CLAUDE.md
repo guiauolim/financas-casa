@@ -48,11 +48,11 @@ src/
     whatsapp/{send,verify-signature,types}.ts
     agent/{index,tools,prompts,model}.ts # orquestração LLM + tools (model.ts escolhe o provedor)
     services/{households,accounts,categories,transactions,budgets,overview,investments,networth,
-              card-holders,merchant-rules,card-import}.ts # casos de uso: usados
+              card-holders,merchant-rules,card-import,card-invoices}.ts # casos de uso: usados
                                          # pelas Server Actions do site E pelas tools do bot
     services/errors.ts       # ServiceError (mensagem PT-BR para o usuário)
     finance/{money,dates,ledger,billing,balances,installments,phone,summary,budget,insights,portfolio,networth,
-             spent-by,categorize}.ts # regras puras (testáveis)
+             spent-by,categorize,spending-view}.ts # regras puras (testáveis)
     importers/excel.ts       # helpers de planilha (magic bytes, números/datas BR, leitura) — B3 e faturas
     importers/limits.ts      # MAX_UPLOAD_BYTES (sem dependências: usado também no navegador)
     importers/b3-excel.ts    # Excel de posição da B3 -> ativos normalizados (puro, sem I/O)
@@ -60,7 +60,8 @@ src/
     importers/__fixtures__/  # SÓ dados INVENTADOS: b3-posicao-ficticia.xlsx, itau-fatura-ficticia-*.xlsx/.xls
   proxy.ts                   # Next 16: substitui o middleware.ts
 supabase/
-  migrations/                # 0001_init … 0005_investimentos, 0006_import_fatura_pessoas, 0007_faturas_pagas
+  migrations/                # 0001_init … 0005_investimentos, 0006_import_fatura_pessoas, 0007_faturas_pagas,
+                             # 0008_fatura_referencia
   seed.sql                   # só dev local (`supabase db reset`); nunca vai para o remoto
   templates/                 # e-mails do Auth (magic link, convite) em PT-BR
 scripts/make-{b3,itau}-fixture.mjs  # geram as fixtures fictícias dos importadores
@@ -70,12 +71,22 @@ docs/ROADMAP.md
 ## Regras de dinheiro
 - Valores SEMPRE em **centavos (bigint)**. Nunca float. Formatar com `Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' })`.
 - Datas de lançamento em `date` no fuso **America/Sao_Paulo**. Timestamps em `timestamptz`.
-- Despesa no cartão de crédito pertence à **fatura** calculada por `closing_day` do cartão;
-  relatórios de "gasto do mês" usam a data da compra, relatórios de "fatura" usam o ciclo.
+- Fatura (`lib/finance/billing.ts`): `closing_day` = **melhor dia de compra** (compras a partir dele vão
+  para a próxima fatura; a fatura fecha na véspera). Chave = **mês do fechamento** "YYYY-MM" (melhor dia 26:
+  26/10–25/11 = "2026-11"). Nome exibido por cartão (`accounts.invoice_naming`: `closing` padrão | `due`) —
+  usar sempre `invoiceLabel`/`invoiceNameMonth`/`refForNameMonth`, nunca montar o nome à mão.
+- A fatura fica **gravada** no lançamento (`transactions.invoice_ref`): site/bot por `transactionInvoiceRefs`
+  no momento do lançamento (parcelas em faturas consecutivas; pagamento = última fatura fechada na data);
+  importação = a fatura do ARQUIVO. Faturas abertas, pagamentos (alocados primeiro à fatura gravada, depois
+  FIFO), limite e o filtro "Fatura" leem `invoice_ref` sem recalcular. Editar data/conta recalcula (com aviso).
+  Mudar o melhor dia de compra NÃO mexe nas faturas já gravadas. Trigger da 0008 preenche se vier vazio.
+- Duas visões do gasto (`lib/finance/spending-view.ts`, `profiles.spending_view`, lembrada por usuário):
+  "Por data da compra" e "Por fatura" (no cartão, conta no mês do nome da fatura). As regras mensais
+  (`summary.ts`, `budget.ts`) recebem `monthOf`; o limite semanal é sempre pela data da compra.
 - Parcelado: criar N transações filhas com `installment_group_id`, `installment_number`, `installment_total`
   (`planInstallments` em `lib/finance/installments.ts`; resto de centavos na 1ª parcela).
 - Pagamento de fatura = **transferência** da conta para o cartão (não é despesa: o gasto já foi contado na compra).
-- Fatura: compra no dia do `closing_day` ou depois cai na fatura seguinte; dia 31 em mês curto = último dia.
+- Fatura: compra no melhor dia (`closing_day`) ou depois cai na fatura seguinte; dia 31 em mês curto = último dia.
 
 ## Casa e pessoa ("de quem é o gasto")
 - `transactions.spent_by` = membro dono do gasto/receita; **null = Casa** (conjunto). É diferente de
@@ -91,6 +102,8 @@ docs/ROADMAP.md
 ## Importação de faturas do cartão
 - `lib/importers/card-statement`: `CardStatementParser` por banco (hoje `itau.ts`), colunas pelo nome,
   erros em PT-BR com aba/coluna/linha. O arquivo do Itaú não traz o fechamento: vem do `closing_day`.
+- Cada linha recebe a fatura do arquivo (`invoice_ref`, pelo vencimento + ciclo do cartão), não o cálculo
+  pela data; parcelas futuras geradas, as faturas seguintes. A prévia avisa linhas que o cálculo poria em outra.
 - `plan.ts` (puro): compra → despesa; estorno/crédito → receita (abate a fatura); IOF/anuidade/juros/
   multa/encargos → "Impostos e taxas"; pagamento → ignorado (ou transferência de uma conta escolhida).
   Parcela k/n: `occurred_on` = data da compra + (k−1) meses; `installment_group_id` = UUID derivado da
@@ -100,8 +113,8 @@ docs/ROADMAP.md
   enviar faturas sobrepostas não duplica.
 - Conferência: soma das linhas (sem o pagamento) × total do arquivo, com a diferença na prévia.
 - Fatura já paga (arquivo "Fatura Paga" ou, sem título, já vencida; ajustável na prévia) grava
-  `card_statement_imports.paid`: depois do vencimento ela fica quitada (`settledReferences` em
-  `balances.ts`) e não entra em "faturas em aberto" nem abate o patrimônio — o pagamento real não
+  `card_statement_imports.paid`: depois do vencimento ela fica quitada (`settledRefs` em
+  `balances.ts`, chave = `card_statement_imports.invoice_ref`) e não entra em "faturas em aberto" nem abate o patrimônio — o pagamento real não
   precisa ser lançado. Pagamentos lançados para ela são absorvidos (não viram crédito).
 - A entrada da importação fica em Novo lançamento (botão "Importar fatura").
 - Classificação (`lib/finance/categorize.ts`): regras aprendidas (`merchant_rules`, "lembrar para
