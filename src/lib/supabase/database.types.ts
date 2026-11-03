@@ -24,6 +24,7 @@ export type Database = {
           due_day: number | null
           household_id: string
           id: string
+          invoice_naming: string
           kind: Database["public"]["Enums"]["account_kind"]
           name: string
           opening_balance_cents: number
@@ -39,6 +40,7 @@ export type Database = {
           due_day?: number | null
           household_id: string
           id?: string
+          invoice_naming?: string
           kind: Database["public"]["Enums"]["account_kind"]
           name: string
           opening_balance_cents?: number
@@ -54,6 +56,7 @@ export type Database = {
           due_day?: number | null
           household_id?: string
           id?: string
+          invoice_naming?: string
           kind?: Database["public"]["Enums"]["account_kind"]
           name?: string
           opening_balance_cents?: number
@@ -249,6 +252,7 @@ export type Database = {
           id: number
           imported_at: string
           imported_by: string | null
+          invoice_ref: string
           paid: boolean
           total_cents: number | null
         }
@@ -261,6 +265,7 @@ export type Database = {
           id?: never
           imported_at?: string
           imported_by?: string | null
+          invoice_ref: string
           paid?: boolean
           total_cents?: number | null
         }
@@ -273,6 +278,7 @@ export type Database = {
           id?: never
           imported_at?: string
           imported_by?: string | null
+          invoice_ref?: string
           paid?: boolean
           total_cents?: number | null
         }
@@ -579,6 +585,7 @@ export type Database = {
           display_name: string
           household_id: string
           phone_e164: string | null
+          spending_view: string
           user_id: string
         }
         Insert: {
@@ -586,6 +593,7 @@ export type Database = {
           display_name: string
           household_id: string
           phone_e164?: string | null
+          spending_view?: string
           user_id: string
         }
         Update: {
@@ -593,6 +601,7 @@ export type Database = {
           display_name?: string
           household_id?: string
           phone_e164?: string | null
+          spending_view?: string
           user_id?: string
         }
         Relationships: [
@@ -621,6 +630,7 @@ export type Database = {
           installment_group_id: string | null
           installment_number: number | null
           installment_total: number | null
+          invoice_ref: string | null
           occurred_on: string
           source: Database["public"]["Enums"]["tx_source"]
           spent_by: string | null
@@ -643,6 +653,7 @@ export type Database = {
           installment_group_id?: string | null
           installment_number?: number | null
           installment_total?: number | null
+          invoice_ref?: string | null
           occurred_on?: string
           source?: Database["public"]["Enums"]["tx_source"]
           spent_by?: string | null
@@ -665,6 +676,7 @@ export type Database = {
           installment_group_id?: string | null
           installment_number?: number | null
           installment_total?: number | null
+          invoice_ref?: string | null
           occurred_on?: string
           source?: Database["public"]["Enums"]["tx_source"]
           spent_by?: string | null
@@ -795,6 +807,15 @@ export type Database = {
         }
         Returns: Json
       }
+      card_best_day: { Args: { p_day: number; p_month: string }; Returns: string }
+      card_invoice_ref: {
+        Args: { p_closing_day: number; p_date: string }
+        Returns: string
+      }
+      card_invoice_ref_by_due: {
+        Args: { p_closing_day: number; p_due_date: string; p_due_day: number }
+        Returns: string
+      }
       create_household: {
         Args: { p_display_name: string; p_household_name: string }
         Returns: string
@@ -806,6 +827,14 @@ export type Database = {
           household_name: string
           invite_id: string
         }[]
+      }
+      invoice_ref_add: {
+        Args: { p_months: number; p_ref: string }
+        Returns: string
+      }
+      invoice_ref_of_boundary: {
+        Args: { p_boundary_month: string; p_closing_day: number }
+        Returns: string
       }
       is_household_member: { Args: { hid: string }; Returns: boolean }
       seed_default_categories: { Args: { hid: string }; Returns: undefined }
