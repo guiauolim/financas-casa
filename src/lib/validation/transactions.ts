@@ -86,22 +86,6 @@ export const transactionFiltersSchema = z.object({
   conta: uuid.optional().catch(undefined),
   categoria: uuid.optional().catch(undefined),
   pessoa: z.union([z.literal(HOUSE), uuid]).optional().catch(undefined),
-  // Filtro "Fatura": "<id do cartão>_<YYYY-MM do fechamento>".
-  fatura: z
-    .string()
-    .optional()
-    .transform((v) => parseInvoiceParam(v) ?? undefined)
-    .catch(undefined),
 });
-
-const INVOICE_PARAM = /^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_(\d{4}-\d{2})$/i;
-
-export function parseInvoiceParam(value: string | undefined): { accountId: string; ref: string } | null {
-  const match = value ? INVOICE_PARAM.exec(value) : null;
-  if (!match || !parseYearMonth(match[2]!)) return null;
-  return { accountId: match[1]!.toLowerCase(), ref: match[2]! };
-}
-
-export const invoiceParam = (accountId: string, ref: string) => `${accountId}_${ref}`;
 
 export type TransactionFilters = z.infer<typeof transactionFiltersSchema>;

@@ -1,16 +1,31 @@
 import "server-only";
-import { type CardAccount, cardInvoices, type InvoiceBalance } from "@/lib/finance/balances";
+import { type CardAccount, cardInvoices, type InvoiceBalance, type InvoiceTotalRow, ledgerFromInvoiceTotals } from "@/lib/finance/balances";
 import { invoiceByRef, invoiceLabel, invoiceNameMonth, isInvoiceRef, refForNameMonth } from "@/lib/finance/billing";
 import { parseYearMonth } from "@/lib/finance/dates";
 import type { LedgerEntry } from "@/lib/finance/ledger";
 import { type CycleCard, isCycleCard, listAccounts } from "./accounts";
 import { throwIf } from "./errors";
-import { listLedger, listTransactions, type Transaction } from "./transactions";
+import { listTransactions, type Transaction } from "./transactions";
 import type { Db } from "./types";
 
 // Faturas do cartão: leitura pela fatura GRAVADA em cada lançamento (transactions.invoice_ref),
-// sem recalcular. Usado pela Visão geral, pelo filtro "Fatura" de Transações e (fase do bot)
+// sem recalcular. Usado pela Visão geral, pelas seções de fatura de Transações e (fase do bot)
 // por perguntas como "quanto está a fatura de novembro?".
+
+// Somas por cartão e fatura feitas no banco (RPC card_invoice_totals, migration 0009): bastam
+// para Total / Pago / Falta sem baixar todos os lançamentos (ver ledgerFromInvoiceTotals).
+export async function listInvoiceTotals(db: Db, { householdId }: { householdId: string }): Promise<LedgerEntry[]> {
+  const { data, error } = await db.rpc("card_invoice_totals", { p_household_id: householdId });
+  throwIf(error);
+  const rows: InvoiceTotalRow[] = (data ?? []).map((row) => ({
+    kind: row.kind === "payment" ? "payment" : "charge",
+    accountId: row.account_id,
+    invoiceRef: row.invoice_ref,
+    occurredOn: row.occurred_on,
+    amountCents: Number(row.amount_cents),
+  }));
+  return ledgerFromInvoiceTotals(rows);
+}
 
 // Faturas pagas fora do sistema (importadas como "Fatura Paga"): cartão -> faturas ("YYYY-MM" do
 // fechamento). Entram em CardAccount.settledRefs (lib/finance/balances).
@@ -57,7 +72,7 @@ function nameInvoice(card: CycleCard, invoice: InvoiceBalance, openRef: string):
   };
 }
 
-function cardInvoicesNamed(
+export function cardInvoicesNamed(
   card: CycleCard,
   ledger: readonly LedgerEntry[],
   today: string,
@@ -67,22 +82,12 @@ function cardInvoicesNamed(
   return { ...result, named: result.invoices.map((i) => nameInvoice(card, i, result.open.ref)) };
 }
 
-export type CardInvoiceOptions = { card: CycleCard; invoices: NamedInvoice[] }[];
-
-// Faturas com movimento de cada cartão (mais recente primeiro), para o filtro "Fatura".
-export async function listCardInvoiceOptions(
-  db: Db,
-  { householdId, today }: { householdId: string; today: string },
-): Promise<CardInvoiceOptions> {
-  const [accounts, ledger, settled] = await Promise.all([
-    listAccounts(db, { householdId, includeArchived: true }),
-    listLedger(db, { householdId }),
-    listSettledInvoices(db, { householdId }),
-  ]);
-  return accounts.filter(isCycleCard).map((card) => ({
-    card,
-    invoices: cardInvoicesNamed(card, ledger, today, settled).named.reverse(),
-  }));
+// A fatura `ref` entre as calculadas; sem movimento, zerada.
+export function findNamedInvoice(card: CycleCard, named: readonly NamedInvoice[], openRef: string, ref: string): NamedInvoice {
+  return (
+    named.find((i) => i.ref === ref) ??
+    nameInvoice(card, { ...invoiceByRef(ref, card), chargesCents: 0, paidCents: 0, remainingCents: 0 }, openRef)
+  );
 }
 
 export type CardInvoiceDetail = {
@@ -100,16 +105,13 @@ export async function getCardInvoice(
   if (!isInvoiceRef(ref)) return null;
   const [accounts, ledger, settled] = await Promise.all([
     listAccounts(db, { householdId, includeArchived: true }),
-    listLedger(db, { householdId }),
+    listInvoiceTotals(db, { householdId }),
     listSettledInvoices(db, { householdId }),
   ]);
   const card = accounts.find((a) => a.id === accountId);
   if (!card || !isCycleCard(card)) return null;
   const { named, open } = cardInvoicesNamed(card, ledger, today, settled);
-  // Fatura sem movimento: zerada.
-  const found =
-    named.find((i) => i.ref === ref) ??
-    nameInvoice(card, { ...invoiceByRef(ref, card), chargesCents: 0, paidCents: 0, remainingCents: 0 }, open.ref);
+  const found = findNamedInvoice(card, named, open.ref, ref);
   const transactions = await listTransactions(db, {
     householdId,
     month: parseYearMonth(ref)!,

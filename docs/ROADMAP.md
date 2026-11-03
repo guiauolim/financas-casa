@@ -47,7 +47,7 @@ Implemente lib/services (accounts, transactions) e as telas:
 Configurações — contas e cartões (closing_day, due_day, limite, dono ou conjunta),
 categorias (com ícone lucide) e membros da casa (nome, telefone E.164 para o futuro bot).
 Transações — lista filtrável por mês, conta, categoria e pessoa; criar/editar/excluir
-(soft delete com lixeira); parcelamento gerando N transações; transferência entre contas.
+(exclusão definitiva desde a Fase 4.7); parcelamento gerando N transações; transferência entre contas.
 Server Actions finas + Zod chamando os serviços. Regras de fatura em
 lib/finance/billing.ts (em qual fatura cai uma compra) com testes.
 ```
@@ -147,10 +147,25 @@ pessoa (card_holders, mesmo cartão), classificação por comércio com regras a
 - `lib/finance/billing` (melhor dia de compra, chave da fatura, nome, parcelas consecutivas, pagamento),
   `lib/finance/spending-view` (`invoiceMonthOf`: no cartão, o mês da fatura, via `monthOf`)
 - `lib/services/card-invoices`: `getCardInvoice`, `findCardInvoicesByName` (base de "quanto está a fatura
-  de novembro?" no bot), opções do filtro "Fatura"
+  de novembro?" no bot)
 - Gasto do mês sempre "por fatura" na Visão geral, Orçamentos e Transações (o toggle "Por data da
   compra / Por fatura" foi removido; data da compra só internamente, no limite semanal); filtro "Fatura" em
   Transações; faturas abertas com nome, link e limite disponível; "Melhor dia de compra" no cartão
+
+## Fase 4.7 — Transações por mês, rapidez e exclusão definitiva ✅ concluída
+**Entregue** (branch `feat/transacoes-por-mes`):
+- Tela Transações: o mês manda em tudo. Uma seção por cartão (fatura do mês com Total/Pago/Falta,
+  recolhível) e "Fora do cartão"; resumo (total, cartão, fora, saldo com entradas e saídas); filtros
+  Conta/Categoria/Pessoa aplicados na hora e mantidos na URL. Saíram o seletor "Fatura" e "Ver fatura".
+- Rapidez: só o mês e os totais das faturas (RPCs `card_invoice_totals`, `month_installment_totals`),
+  meses em memória no navegador, prefetch do anterior/próximo, troca de mês sem skeleton e seletor
+  rápido de mês/ano
+- Exclusão em lote (checkbox, selecionar todos por seção, "só estas / e as próximas parcelas") e
+  "Excluir fatura"
+- Migration `0009_exclusao_definitiva.sql` (compatível com o código anterior, já aplicada): RPCs novas,
+  índices sem `deleted_at` e apaga o que estava na lixeira. Tela Lixeira/restaurar removidas.
+- [ ] Depois do merge e do deploy: `supabase/pending/0010_remove_deleted_at.sql` (remove `deleted_at`,
+  índices antigos e `profiles.spending_view`) → mover para `migrations/`, `db push`, `db:types`
 
 ---
 

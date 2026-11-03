@@ -1,7 +1,6 @@
 import { toYearMonth, type YearMonth } from "./dates";
 
 // Lançamento "leve" usado pelas regras de orçamento, saldo e fatura (sem joins).
-// Só lançamentos não excluídos entram aqui (o serviço já filtra `deleted_at`).
 export type LedgerEntry = {
   type: "expense" | "income" | "transfer";
   amountCents: number;

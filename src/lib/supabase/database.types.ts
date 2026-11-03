@@ -807,7 +807,10 @@ export type Database = {
         }
         Returns: Json
       }
-      card_best_day: { Args: { p_day: number; p_month: string }; Returns: string }
+      card_best_day: {
+        Args: { p_day: number; p_month: string }
+        Returns: string
+      }
       card_invoice_ref: {
         Args: { p_closing_day: number; p_date: string }
         Returns: string
@@ -815,6 +818,16 @@ export type Database = {
       card_invoice_ref_by_due: {
         Args: { p_closing_day: number; p_due_date: string; p_due_day: number }
         Returns: string
+      }
+      card_invoice_totals: {
+        Args: { p_household_id: string }
+        Returns: {
+          account_id: string
+          amount_cents: number
+          invoice_ref: string
+          kind: string
+          occurred_on: string
+        }[]
       }
       create_household: {
         Args: { p_display_name: string; p_household_name: string }
@@ -837,6 +850,18 @@ export type Database = {
         Returns: string
       }
       is_household_member: { Args: { hid: string }; Returns: boolean }
+      month_installment_totals: {
+        Args: {
+          p_from: string
+          p_household_id: string
+          p_refs: string[]
+          p_to: string
+        }
+        Returns: {
+          installment_group_id: string
+          total_cents: number
+        }[]
+      }
       seed_default_categories: { Args: { hid: string }; Returns: undefined }
     }
     Enums: {

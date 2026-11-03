@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accountBalance, cardInvoices, totalBalance } from "./balances";
+import { accountBalance, cardInvoices, type InvoiceTotalRow, ledgerFromInvoiceTotals, totalBalance } from "./balances";
 import type { LedgerEntry } from "./ledger";
 
 const BANK = "bank";
@@ -209,5 +209,40 @@ describe("cardInvoices com a fatura gravada no lançamento (invoice_ref)", () =>
       entry("transfer", "2026-11-11", 4000, BANK, CARD), // adiantado
     ];
     expect(cardInvoices(card, entries, "2026-11-12").limitUsedCents).toBe(26000);
+  });
+});
+
+describe("ledgerFromInvoiceTotals", () => {
+  const card = { id: CARD, closingDay: 26, dueDay: 5 };
+  // Lançamentos "de verdade" e os totais que card_invoice_totals devolveria para eles.
+  const entries = [
+    entry("expense", "2026-09-30", 20000, CARD, null, "2026-10"),
+    entry("expense", "2026-10-27", 30000, CARD, null, "2026-11"),
+    entry("income", "2026-11-02", 5000, CARD, null, "2026-11"), // estorno
+    entry("transfer", "2026-11-03", 2000, CARD, BANK, "2026-11"), // saque no cartão
+    entry("expense", "2026-11-20", 7000, CARD), // sem fatura gravada: pela data
+    entry("income", "2026-12-01", 9000, CARD, null, "2026-12"), // fatura só com estorno: crédito
+    entry("transfer", "2026-11-04", 20000, BANK, CARD, "2026-10"), // paga a de outubro
+    entry("transfer", "2026-11-10", 15000, BANK, CARD), // sem fatura: FIFO
+  ];
+  const totals: InvoiceTotalRow[] = [
+    { kind: "charge", accountId: CARD, invoiceRef: "2026-10", occurredOn: null, amountCents: 20000 },
+    { kind: "charge", accountId: CARD, invoiceRef: "2026-11", occurredOn: null, amountCents: 30000 - 5000 + 2000 },
+    { kind: "charge", accountId: CARD, invoiceRef: null, occurredOn: "2026-11-20", amountCents: 7000 },
+    { kind: "charge", accountId: CARD, invoiceRef: "2026-12", occurredOn: null, amountCents: -9000 },
+    { kind: "payment", accountId: CARD, invoiceRef: "2026-10", occurredOn: null, amountCents: 20000 },
+    { kind: "payment", accountId: CARD, invoiceRef: null, occurredOn: null, amountCents: 15000 },
+  ];
+
+  it("dá o mesmo resultado de cardInvoices sobre todos os lançamentos", () => {
+    const today = "2026-11-25";
+    const full = cardInvoices(card, entries, today);
+    const fromTotals = cardInvoices(card, ledgerFromInvoiceTotals(totals), today);
+    const strip = (r: typeof full) =>
+      r.invoices.map(({ ref, chargesCents, paidCents, remainingCents }) => ({ ref, chargesCents, paidCents, remainingCents }));
+    expect(strip(fromTotals)).toEqual(strip(full));
+    expect(fromTotals.creditCents).toBe(full.creditCents);
+    expect(fromTotals.limitUsedCents).toBe(full.limitUsedCents);
+    expect(fromTotals.open.ref).toBe(full.open.ref);
   });
 });

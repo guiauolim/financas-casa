@@ -48,7 +48,7 @@ export type PlannedLine = {
   pattern: string; // trecho para "lembrar para próximas"
   spentBy: SpentBy;
   status: LineStatus;
-  duplicateOf: "batch" | "existing" | "trash" | null;
+  duplicateOf: "batch" | "existing" | null;
   future: boolean; // parcela futura (opção "criar parcelas futuras")
   include: boolean;
   transferFromAccountId: string | null; // pagamento criado como transferência
@@ -90,7 +90,7 @@ export type PlanInput = {
   holders: ReadonlyMap<string, string>; // final -> user_id
   categories: readonly PlanCategory[];
   rules: readonly MerchantRule[];
-  existing: ReadonlyMap<string, { deleted: boolean }>; // import_hash já no banco
+  existing: ReadonlySet<string>; // import_hash já no banco (o que foi excluído não está aqui)
   overrides?: ReadonlyMap<string, LineOverride>;
   paymentAccountId?: string | null; // cria pagamentos como transferência desta conta
   includeFuture?: boolean; // inclui as parcelas futuras geradas
@@ -175,11 +175,10 @@ export function planCardImport(input: PlanInput): CardImportPlan {
     }
     line.isOther = line.type === "expense" && (!line.categoryId || line.categoryId === otherCategory?.id);
 
-    const found = existing.get(line.hash);
     if (line.status !== "ignored") {
-      if (found) {
+      if (existing.has(line.hash)) {
         line.status = "duplicate";
-        line.duplicateOf = found.deleted ? "trash" : "existing";
+        line.duplicateOf = "existing";
       } else if (seen.has(line.hash)) {
         line.status = "duplicate";
         line.duplicateOf = "batch";

@@ -119,3 +119,45 @@ export function cardInvoices(card: CardAccount, entries: readonly LedgerEntry[],
     limitUsedCents: Math.max(0, outstanding - pool),
   };
 }
+
+// ───────────────────────── Totais agregados ─────────────────────────
+
+// Linha de card_invoice_totals (migration 0009): soma por cartão e fatura, feita no banco.
+// - charge: lançamentos no cartão (compras/saques − estornos) da fatura `invoiceRef`; sem fatura
+//   gravada, os de uma data (`occurredOn`).
+// - payment: transferências para o cartão que pagam `invoiceRef` (null = FIFO).
+export type InvoiceTotalRow = {
+  kind: "charge" | "payment";
+  accountId: string;
+  invoiceRef: string | null;
+  occurredOn: string | null;
+  amountCents: number;
+};
+
+// Converte os totais em lançamentos equivalentes para `cardInvoices`: o resultado (total, pago,
+// falta, crédito) é o mesmo de passar todos os lançamentos, sem precisar baixá-los.
+export function ledgerFromInvoiceTotals(rows: readonly InvoiceTotalRow[]): LedgerEntry[] {
+  return rows.map((row) => {
+    const occurredOn = row.occurredOn ?? `${row.invoiceRef}-01`;
+    if (row.kind === "payment") {
+      return {
+        type: "transfer",
+        amountCents: row.amountCents,
+        occurredOn,
+        accountId: "",
+        transferAccountId: row.accountId,
+        categoryId: null,
+        invoiceRef: row.invoiceRef,
+      };
+    }
+    return {
+      type: row.amountCents < 0 ? "income" : "expense",
+      amountCents: Math.abs(row.amountCents),
+      occurredOn,
+      accountId: row.accountId,
+      transferAccountId: null,
+      categoryId: null,
+      invoiceRef: row.invoiceRef,
+    };
+  });
+}

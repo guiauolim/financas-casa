@@ -29,7 +29,7 @@ import { daysBetween, formatDayMonth, formatMonthLong, toYearMonth } from "@/lib
 import type { InsightTone } from "@/lib/finance/insights";
 import { HOUSE, spentByToParam } from "@/lib/finance/spent-by";
 import { capitalize, cn } from "@/lib/utils";
-import { invoiceParam } from "@/lib/validation/transactions";
+import { type InvoiceNaming, invoiceNameMonth } from "@/lib/finance/billing";
 import { TransactionRows } from "../transacoes/transaction-rows";
 import { IncomeExpenseChart } from "./income-expense-chart";
 import { loadOverview, loadRecent, mesParam } from "./data";
@@ -338,7 +338,9 @@ function dueLabel(today: string, dueDate: string) {
   return `vence em ${formatDayMonth(dueDate)}`;
 }
 
-const invoiceHref = (accountId: string, ref: string) => `/transacoes?fatura=${invoiceParam(accountId, ref)}`;
+// A fatura na tela Transações: o mês do nome dela, rolando até a seção do cartão.
+const invoiceHref = (account: { id: string; invoiceNaming: InvoiceNaming }, invoice: { ref: string; dueMonth: string }) =>
+  `/transacoes?mes=${invoiceNameMonth(invoice, account.invoiceNaming)}#fatura-${account.id}`;
 
 export async function OpenInvoices(props: Props) {
   const mes = await mesOf(props);
@@ -360,7 +362,7 @@ export async function OpenInvoices(props: Props) {
             return (
               <li key={account.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
                 <Link
-                  href={invoiceHref(account.id, open.ref)}
+                  href={invoiceHref(account, open)}
                   className="-mx-2 flex min-h-11 items-center gap-3 rounded-lg px-2 py-1 hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
                   <span
@@ -383,7 +385,7 @@ export async function OpenInvoices(props: Props) {
                   return (
                     <Link
                       key={invoice.ref}
-                      href={invoiceHref(account.id, invoice.ref)}
+                      href={invoiceHref(account, invoice)}
                       className={cn(
                         "ml-11 flex min-h-11 items-center rounded-lg px-3 py-2 text-[13px] font-medium focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
                         late ? "bg-danger/10 text-danger" : "bg-[#FBEBD9] text-warning-foreground",

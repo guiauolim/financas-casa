@@ -155,7 +155,7 @@ const input = (overrides: Partial<PlanInput> = {}): PlanInput => ({
   ]),
   categories: CATEGORIES,
   rules: [],
-  existing: new Map(),
+  existing: new Set<string>(),
   ...overrides,
 });
 
@@ -208,7 +208,7 @@ describe("planCardImport", () => {
 
   it("reimportar a mesma fatura marca tudo como duplicado", () => {
     const first = planCardImport(input());
-    const existing = new Map(first.lines.filter((l) => l.include).map((l) => [l.hash, { deleted: false }]));
+    const existing = new Set(first.lines.filter((l) => l.include).map((l) => l.hash));
     const again = planCardImport(input({ existing }));
     const real = again.lines.filter((l) => !l.future && l.kind !== "payment");
     expect(real.every((l) => l.status === "duplicate" && l.duplicateOf === "existing" && !l.include)).toBe(true);
@@ -221,11 +221,14 @@ describe("planCardImport", () => {
     expect(plan.lines.filter((l) => l.statementIndex === 1 && l.kind !== "payment").every((l) => l.duplicateOf === "batch")).toBe(true);
   });
 
-  it("apagado (lixeira) não volta", () => {
+  it("sem lixeira: linha excluída volta ao reimportar a mesma fatura", () => {
     const first = planCardImport(input());
     const target = find(first, "Supermercado Exemplobrasiliabra")[0]!;
-    const plan = planCardImport(input({ existing: new Map([[target.hash, { deleted: true }]]) }));
-    expect(find(plan, "Supermercado Exemplobrasiliabra")[0]).toMatchObject({ status: "duplicate", duplicateOf: "trash" });
+    // Gravou tudo e depois excluiu o mercado: ele não está mais entre os existentes.
+    const existing = new Set(first.lines.filter((l) => l.include && l.hash !== target.hash).map((l) => l.hash));
+    const plan = planCardImport(input({ existing }));
+    expect(find(plan, "Supermercado Exemplobrasiliabra")[0]).toMatchObject({ status: "new", include: true });
+    expect(plan.lines.filter((l) => l.status === "new" && !l.future).map((l) => l.hash)).toEqual([target.hash]);
   });
 
   it("parcelas futuras: geradas depois da última vista e deduplicadas na próxima fatura", () => {
@@ -242,7 +245,7 @@ describe("planCardImport", () => {
     expect(planCardImport(input()).lines.filter((l) => l.future).every((l) => !l.include)).toBe(true);
 
     // Gravou fatura 1 + futuras; a fatura 2 traz 2/3 e 3/4 reais → duplicadas.
-    const existing = new Map(first.lines.filter((l) => l.include).map((l) => [l.hash, { deleted: false }]));
+    const existing = new Set(first.lines.filter((l) => l.include).map((l) => l.hash));
     const second = planCardImport(input({ files: parseAll(FATURA_2), existing }));
     expect(find(second, "Mp *Lojaficticiacuritibabra", 2)[0]).toMatchObject({ status: "duplicate", future: false });
     expect(find(second, "Moveis Inventadoscuritibabra", 3)[0]).toMatchObject({ status: "duplicate" });

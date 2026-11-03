@@ -748,11 +748,9 @@ export function CardImportForm({
 function StatusBadge({ line, include }: { line: PlannedLine; include: boolean }) {
   const label =
     line.status === "duplicate"
-      ? line.duplicateOf === "trash"
-        ? "duplicado · na lixeira"
-        : line.duplicateOf === "batch"
-          ? "duplicado no envio"
-          : "já importado"
+      ? line.duplicateOf === "batch"
+        ? "duplicado no envio"
+        : "já importado"
       : line.status === "ignored"
         ? STATUS_LABELS.ignored
         : include

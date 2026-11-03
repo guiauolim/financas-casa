@@ -3,8 +3,8 @@ import { ConfirmAction } from "@/components/action-button";
 import type { Transaction } from "@/lib/services/transactions";
 import { deleteTransactionAction } from "./actions";
 
-// `compact`: botão só de ícone para a linha da lista (fica na mesma página);
-// sem ele, botão "Excluir" da tela de edição (volta para a lista do mês).
+// Botão "Excluir" da tela de edição: apaga de vez e volta para a lista do mês. `compact`: só o
+// ícone (fica na mesma página). Na lista, a exclusão é pela seleção (month-browser).
 export function DeleteTransactionButton({
   tx,
   compact = false,
@@ -39,7 +39,7 @@ export function DeleteTransactionButton({
         )
       }
       title={title}
-      description="O lançamento vai para a lixeira e pode ser restaurado depois."
+      description="O lançamento é apagado de vez. Não dá para desfazer."
       options={
         hasFollowing
           ? [
