@@ -145,10 +145,11 @@ pessoa (card_holders, mesmo cartão), classificação por comércio com regras a
   `profiles.spending_view`; backfill (importadas pela fatura do arquivo, parcelas em sequência, o resto
   pelo cálculo), trigger de segurança e `apply_card_import` gravando a fatura do arquivo
 - `lib/finance/billing` (melhor dia de compra, chave da fatura, nome, parcelas consecutivas, pagamento),
-  `lib/finance/spending-view` (visões "Por data da compra" / "Por fatura" via `monthOf`)
+  `lib/finance/spending-view` (`invoiceMonthOf`: no cartão, o mês da fatura, via `monthOf`)
 - `lib/services/card-invoices`: `getCardInvoice`, `findCardInvoicesByName` (base de "quanto está a fatura
   de novembro?" no bot), opções do filtro "Fatura"
-- Toggle de visão (lembrado por usuário) na Visão geral, Orçamentos e Transações; filtro "Fatura" em
+- Gasto do mês sempre "por fatura" na Visão geral, Orçamentos e Transações (o toggle "Por data da
+  compra / Por fatura" foi removido; data da compra só internamente, no limite semanal); filtro "Fatura" em
   Transações; faturas abertas com nome, link e limite disponível; "Melhor dia de compra" no cartão
 
 ---

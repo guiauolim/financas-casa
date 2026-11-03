@@ -19,8 +19,9 @@ export type DateRange = { from: string; to: string }; // inclusivo
 
 export const inRange = (date: string, { from, to }: DateRange) => date >= from && date <= to;
 
-// Mês ("YYYY-MM") em que um lançamento conta nos relatórios mensais. O padrão é o mês da data
-// da compra; a visão "Por fatura" troca, no cartão, pelo mês da fatura (lib/finance/spending-view).
+// Mês ("YYYY-MM") em que um lançamento conta nos relatórios mensais. Os serviços usam sempre
+// `invoiceMonthOf` (no cartão, o mês da fatura — lib/finance/spending-view); `purchaseMonthOf`
+// (mês da data da compra) é o padrão das funções puras e fica para uso interno.
 export type MonthOf = (entry: LedgerEntry) => string;
 
 export const purchaseMonthOf: MonthOf = (entry) => entry.occurredOn.slice(0, 7);

@@ -22,7 +22,7 @@ import { MonthNav } from "@/components/month-nav";
 import { Panel } from "@/components/panel";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SpendingViewToggle, spendingViewNote } from "@/components/spending-view-toggle";
+import { SPENDING_RULE_NOTE } from "@/components/spending-rule-note";
 import { projectedCents } from "@/lib/finance/budget";
 import { formatBRL } from "@/lib/finance/money";
 import { daysBetween, formatDayMonth, formatMonthLong, toYearMonth } from "@/lib/finance/dates";
@@ -45,14 +45,11 @@ const textLink =
 
 export async function MonthSelector(props: Props) {
   const mes = await mesOf(props);
-  const { month, view } = await loadOverview(mes);
+  const { month } = await loadOverview(mes);
   return (
     <Panel>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <MonthNav month={month} href={(m) => `/dashboard?mes=${m}`} />
-        <SpendingViewToggle view={view} />
-      </div>
-      <p className="text-[13px] text-muted-foreground">{spendingViewNote(view)}</p>
+      <MonthNav month={month} href={(m) => `/dashboard?mes=${m}`} />
+      <p className="text-[13px] text-muted-foreground">{SPENDING_RULE_NOTE}</p>
     </Panel>
   );
 }
@@ -220,12 +217,12 @@ const MAX_CATEGORIES = 8;
 
 export async function CategorySpending(props: Props) {
   const mes = await mesOf(props);
-  const { categories, view } = await loadOverview(mes);
+  const { categories } = await loadOverview(mes);
   const shown = categories.slice(0, MAX_CATEGORIES);
   return (
     <Panel
       title="Gastos por categoria"
-      description={view === "invoice" ? "Despesas do mês; no cartão, pela fatura." : "Despesas do mês pela data da compra."}
+      description="Despesas do mês; no cartão, pela fatura."
       actions={
         <Link href="/orcamentos" className={textLink}>
           Orçamentos <ArrowRight className="size-4" aria-hidden />

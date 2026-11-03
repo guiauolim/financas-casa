@@ -4,7 +4,6 @@ import { monthRange, toYearMonth, type YearMonth } from "@/lib/finance/dates";
 import type { LedgerEntry } from "@/lib/finance/ledger";
 import { planInstallments } from "@/lib/finance/installments";
 import { defaultSpentBy, type SpentBy } from "@/lib/finance/spent-by";
-import type { SpendingView } from "@/lib/finance/spending-view";
 import type { AccountKind } from "@/lib/validation/accounts";
 import type { TxType } from "@/lib/validation/categories";
 import type { Scope, TransactionInput } from "@/lib/validation/transactions";
@@ -104,10 +103,8 @@ export type ListFilters = {
   categoryId?: string;
   // De quem é: id do membro, null = só Casa, undefined = todos.
   spentBy?: SpentBy;
-  // "invoice": lançamentos no cartão entram pelo mês da fatura (nome do cartão); o resto pela data.
-  view?: SpendingView;
   // Filtro "Fatura": tudo o que está nesta fatura do cartão (inclusive parcelas de compras antigas)
-  // e os pagamentos feitos para ela. Ignora `month` e `view`.
+  // e os pagamentos feitos para ela. Ignora `month`.
   invoice?: { accountId: string; ref: string };
 };
 
@@ -128,11 +125,10 @@ async function listViewCards(db: Db, householdId: string): Promise<CardForView[]
 }
 
 // Condição (sintaxe do PostgREST) do que conta no mês: fora do cartão pela data; no cartão,
-// pela fatura cujo nome é o mês (visão "Por fatura").
+// pela fatura cujo nome é o mês (regra "por fatura" do sistema).
 async function monthCondition(db: Db, filters: ListFilters): Promise<string> {
   const { from, to } = monthRange(filters.month);
   const byDate = `occurred_on.gte.${from},occurred_on.lte.${to}`;
-  if (filters.view !== "invoice") return `and(${byDate})`;
   const cards = await listViewCards(db, filters.householdId);
   if (cards.length === 0) return `and(${byDate})`;
   const monthKey = toYearMonth(filters.month);

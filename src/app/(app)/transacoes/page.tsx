@@ -10,7 +10,7 @@ import { ListSkeleton, Panel } from "@/components/panel";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SpendingViewToggle, spendingViewNote } from "@/components/spending-view-toggle";
+import { SPENDING_RULE_NOTE } from "@/components/spending-rule-note";
 import { EmptyState } from "@/components/empty-state";
 import { requireActor } from "@/lib/auth/session";
 import { addMonthsToRef } from "@/lib/finance/billing";
@@ -88,7 +88,6 @@ async function Transactions({ searchParams }: Pick<PageProps<"/transacoes">, "se
   const today = todayInSaoPaulo();
   const month = monthFromParam(filters.mes, today);
   const monthKey = toYearMonth(month);
-  const view = actor.profile.spendingView;
   // Filtro "Fatura": a fatura inteira de um cartão (os outros filtros e o mês não se aplicam).
   const invoiceFilter = filters.fatura ?? null;
 
@@ -102,7 +101,6 @@ async function Transactions({ searchParams }: Pick<PageProps<"/transacoes">, "se
             accountId: filters.conta,
             categoryId: filters.categoria,
             spentBy: filters.pessoa === HOUSE ? null : filters.pessoa,
-            view,
           }),
     }),
     listAccounts(db, { householdId: actor.householdId, includeArchived: true }),
@@ -129,11 +127,8 @@ async function Transactions({ searchParams }: Pick<PageProps<"/transacoes">, "se
   return (
     <>
       <Panel>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <MonthNav month={month} href={(m) => filterHref(filters, m)} />
-          <SpendingViewToggle view={view} />
-        </div>
-        <p className="text-[13px] text-muted-foreground">{spendingViewNote(view)}</p>
+        <MonthNav month={month} href={(m) => filterHref(filters, m)} />
+        <p className="text-[13px] text-muted-foreground">{SPENDING_RULE_NOTE}</p>
         <form method="get" action="/transacoes" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_auto]">
           <input type="hidden" name="mes" value={monthKey} />
           <div className="flex flex-col gap-2">

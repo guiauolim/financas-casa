@@ -12,7 +12,7 @@ import type { YearMonth } from "@/lib/finance/dates";
 import type { LedgerEntry } from "@/lib/finance/ledger";
 import { type BudgetInput, budgetColumns } from "@/lib/validation/budgets";
 import { isUniqueViolation, ServiceError, throwIf } from "./errors";
-import { type SpendingView, spendingMonthOf } from "@/lib/finance/spending-view";
+import { invoiceMonthOf } from "@/lib/finance/spending-view";
 import { isCycleCard, listAccounts } from "./accounts";
 import { listLedger } from "./transactions";
 import type { Actor, Db } from "./types";
@@ -184,23 +184,21 @@ export function buildBudgetStatus(
 }
 
 // Usado pela tela de Orçamentos e (Fase 7) pela tool get_budget_status do bot.
-// `view` = "invoice": no cartão, o gasto conta no mês da fatura (lib/finance/spending-view).
+// No cartão, o gasto conta no mês da fatura (lib/finance/spending-view); o semanal, pela data.
 export async function getBudgetStatus(
   db: Db,
   {
     householdId,
     month,
     today,
-    view = "purchase",
-  }: { householdId: string; month: YearMonth; today: string; view?: SpendingView },
+  }: { householdId: string; month: YearMonth; today: string },
 ): Promise<BudgetStatusReport> {
   const [budgets, ledger, accounts] = await Promise.all([
     listBudgets(db, { householdId }),
     listLedger(db, { householdId }),
-    view === "invoice" ? listAccounts(db, { householdId, includeArchived: true }) : Promise.resolve([]),
+    listAccounts(db, { householdId, includeArchived: true }),
   ]);
-  const monthOf = spendingMonthOf(
-    view,
+  const monthOf = invoiceMonthOf(
     accounts.filter(isCycleCard).map((c) => ({ id: c.id, closingDay: c.closingDay, dueDay: c.dueDay, naming: c.invoiceNaming })),
   );
   return buildBudgetStatus(budgets, ledger, { month, today, monthOf });

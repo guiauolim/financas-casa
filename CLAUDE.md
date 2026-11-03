@@ -80,9 +80,11 @@ docs/ROADMAP.md
   importação = a fatura do ARQUIVO. Faturas abertas, pagamentos (alocados primeiro à fatura gravada, depois
   FIFO), limite e o filtro "Fatura" leem `invoice_ref` sem recalcular. Editar data/conta recalcula (com aviso).
   Mudar o melhor dia de compra NÃO mexe nas faturas já gravadas. Trigger da 0008 preenche se vier vazio.
-- Duas visões do gasto (`lib/finance/spending-view.ts`, `profiles.spending_view`, lembrada por usuário):
-  "Por data da compra" e "Por fatura" (no cartão, conta no mês do nome da fatura). As regras mensais
-  (`summary.ts`, `budget.ts`) recebem `monthOf`; o limite semanal é sempre pela data da compra.
+- Gasto do mês é sempre **por fatura** (regra do sistema, sem opção na UI): no cartão, conta no mês do
+  nome da fatura; o resto, pela data (`invoiceMonthOf` em `lib/finance/spending-view.ts`). As regras
+  mensais (`summary.ts`, `budget.ts`) recebem `monthOf`; `purchaseMonthOf` (pela data da compra) fica só
+  para uso interno — o limite semanal do cartão é sempre pela data da compra. `profiles.spending_view`
+  (0008) ficou sem uso.
 - Parcelado: criar N transações filhas com `installment_group_id`, `installment_number`, `installment_total`
   (`planInstallments` em `lib/finance/installments.ts`; resto de centavos na 1ª parcela).
 - Pagamento de fatura = **transferência** da conta para o cartão (não é despesa: o gasto já foi contado na compra).

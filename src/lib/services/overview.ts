@@ -4,7 +4,7 @@ import { invoiceLabel } from "@/lib/finance/billing";
 import { projectedCents, weekToDate } from "@/lib/finance/budget";
 import { compareYM, type YearMonth, yearMonthOf } from "@/lib/finance/dates";
 import { buildInsights, type Insight } from "@/lib/finance/insights";
-import { type SpendingView, spendingMonthOf } from "@/lib/finance/spending-view";
+import { invoiceMonthOf } from "@/lib/finance/spending-view";
 import { type NetWorthReport, netWorthForMonth } from "@/lib/finance/networth";
 import { expensesByCategory, expensesByPerson, type MonthTotals, monthlySeries, type Summary, summarizeMonth } from "@/lib/finance/summary";
 import { type Account, isCycleCard, listAccounts } from "./accounts";
@@ -34,7 +34,6 @@ export type CardInvoiceSummary = {
 export type MonthOverview = {
   month: YearMonth;
   today: string;
-  view: SpendingView; // como o gasto do mês foi contado (data da compra ou fatura)
   isCurrentMonth: boolean;
   hasTransactions: boolean; // a casa tem algum lançamento (qualquer mês)
   summary: Summary; // entradas − saídas do mês
@@ -56,8 +55,7 @@ export async function getMonthOverview(
     householdId,
     month,
     today,
-    view = "purchase",
-  }: { householdId: string; month: YearMonth; today: string; view?: SpendingView },
+  }: { householdId: string; month: YearMonth; today: string },
 ): Promise<MonthOverview> {
   const [ledger, budgetList, accounts, categoryList, investments, snapshots, members, settled] = await Promise.all([
     listLedger(db, { householdId }),
@@ -72,9 +70,8 @@ export async function getMonthOverview(
 
   const isCurrentMonth = compareYM(month, yearMonthOf(today)) === 0;
   const cycleCards = accounts.filter(isCycleCard);
-  // Em que mês cada lançamento conta: data da compra ou, no cartão, a fatura (pelo nome do cartão).
-  const monthOf = spendingMonthOf(
-    view,
+  // Em que mês cada lançamento conta: no cartão, a fatura (pelo nome do cartão); o resto, a data.
+  const monthOf = invoiceMonthOf(
     cycleCards.map((c) => ({ id: c.id, closingDay: c.closingDay, dueDay: c.dueDay, naming: c.invoiceNaming })),
   );
   const budgets = buildBudgetStatus(budgetList, ledger, { month, today, monthOf });
@@ -153,7 +150,6 @@ export async function getMonthOverview(
     today,
     isCurrentMonth,
     hasTransactions: ledger.length > 0,
-    view,
     summary: summarizeMonth(ledger, month, monthOf),
     budgets,
     categories,

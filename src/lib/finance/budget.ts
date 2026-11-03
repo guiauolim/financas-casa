@@ -4,8 +4,8 @@ import { type DateRange, entriesInMonth, inRange, type LedgerEntry, type MonthOf
 // Regras de orçamento.
 //
 // - Gasto considerado = despesas (type "expense"). No mensal, o mês de cada despesa vem de
-//   `monthOf`: pela data da compra (padrão; cada parcela no mês da própria data) ou, na visão
-//   "Por fatura", o cartão conta no mês da fatura (lib/finance/spending-view).
+//   `monthOf`: no sistema, o cartão conta no mês da fatura (`invoiceMonthOf`, lib/finance/spending-view);
+//   sem `monthOf`, pela data da compra (cada parcela no mês da própria data).
 //   Transferências (inclusive pagamento de fatura) e receitas nunca contam: o gasto
 //   no cartão já foi contado na compra.
 // - Mensal: total da casa (sem categoria) ou por categoria, no mês.
@@ -69,7 +69,7 @@ export function expenseSpent(entries: readonly LedgerEntry[], filter: SpentFilte
   return total;
 }
 
-// Despesas que contam no mês (pela visão), opcionalmente só de uma categoria.
+// Despesas que contam no mês (pelo `monthOf`), opcionalmente só de uma categoria.
 export function monthExpenseSpent(
   entries: readonly LedgerEntry[],
   month: YearMonth,
@@ -133,7 +133,7 @@ export type MonthProjection =
 // - `daysElapsed` inclui hoje (no dia 15, 15 dias).
 // - No dia 1 não projeta (um mercado no dia 1 viraria 30 mercados).
 // - Nunca fica abaixo do que já está lançado no mês (ex.: parcelas com data futura).
-// - Na visão "Por fatura", o que conta no mês mas tem data anterior a ele (compras do fim do mês
+// - Contando por fatura, o que conta no mês mas tem data anterior a ele (compras do fim do mês
 //   passado e parcelas antigas na fatura) entra fixo, sem ser extrapolado.
 export function monthProjection(
   entries: readonly LedgerEntry[],

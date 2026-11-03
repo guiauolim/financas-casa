@@ -1,5 +1,4 @@
 import "server-only";
-import { isSpendingView, type SpendingView } from "@/lib/finance/spending-view";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { MemberInput } from "@/lib/validation/members";
 import type { AcceptInviteInput, CreateHouseholdInput } from "@/lib/validation/onboarding";
@@ -13,13 +12,12 @@ export type Profile = {
   householdId: string;
   displayName: string;
   householdName: string;
-  spendingView: SpendingView; // visão do gasto lembrada: por data da compra ou por fatura
 };
 
 export async function getProfile(db: Db, userId: string): Promise<Profile | null> {
   const { data, error } = await db
     .from("profiles")
-    .select("user_id, household_id, display_name, spending_view, households(name)")
+    .select("user_id, household_id, display_name, households(name)")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) throw error;
@@ -29,18 +27,7 @@ export async function getProfile(db: Db, userId: string): Promise<Profile | null
     householdId: data.household_id,
     displayName: data.display_name,
     householdName: data.households?.name ?? "",
-    spendingView: isSpendingView(data.spending_view) ? data.spending_view : "purchase",
   };
-}
-
-// Lembra a visão do gasto (Por data da compra / Por fatura) do próprio usuário.
-export async function setSpendingView(db: Db, actor: { householdId: string; userId: string }, view: SpendingView) {
-  const { error } = await db
-    .from("profiles")
-    .update({ spending_view: view })
-    .eq("household_id", actor.householdId)
-    .eq("user_id", actor.userId);
-  throwIf(error);
 }
 
 export async function getPendingInvite(db: Db) {

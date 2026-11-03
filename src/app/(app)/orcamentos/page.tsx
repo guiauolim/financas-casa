@@ -11,7 +11,6 @@ import { PageHeader } from "@/components/page-header";
 import { Panel } from "@/components/panel";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { SpendingViewToggle } from "@/components/spending-view-toggle";
 import { WeekBars } from "@/components/week-bars";
 import { requireActor } from "@/lib/auth/session";
 import { projectedCents } from "@/lib/finance/budget";
@@ -116,9 +115,8 @@ async function Budgets({ searchParams }: Pick<PageProps<"/orcamentos">, "searchP
   const db = await createClient();
   const today = todayInSaoPaulo();
   const month = monthFromParam((await searchParams).mes, today);
-  const view = actor.profile.spendingView;
   const [report, accounts] = await Promise.all([
-    getBudgetStatus(db, { householdId: actor.householdId, month, today, view }),
+    getBudgetStatus(db, { householdId: actor.householdId, month, today }),
     listAccounts(db, { householdId: actor.householdId }),
   ]);
   const hasCards = accounts.some((a) => a.kind === "credit_card");
@@ -128,15 +126,10 @@ async function Budgets({ searchParams }: Pick<PageProps<"/orcamentos">, "searchP
   return (
     <>
       <Panel>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <MonthNav month={month} href={(m) => `/orcamentos?mes=${m}`} />
-          <SpendingViewToggle view={view} />
-        </div>
+        <MonthNav month={month} href={(m) => `/orcamentos?mes=${m}`} />
         <p className="text-[13px] text-muted-foreground">
-          {view === "invoice"
-            ? "Conta o que foi gasto no mês; no cartão, pela fatura (inclusive parcelas de compras antigas). O limite semanal segue a data da compra."
-            : "Conta o que foi gasto pela data da compra."}{" "}
-          Transferências, pagamentos de fatura e receitas não entram.
+          Conta o que foi gasto no mês; no cartão, pela fatura (inclusive parcelas de compras antigas). O limite
+          semanal segue a data da compra. Transferências, pagamentos de fatura e receitas não entram.
         </p>
       </Panel>
 
