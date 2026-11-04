@@ -228,6 +228,15 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
       toast.success(result.deleted === 1 ? "1 lançamento excluído." : `${result.deleted} lançamentos excluídos.`);
     });
 
+  // Lixeira da seção: os lançamentos visíveis dela (com os filtros), na confirmação de lote.
+  const confirmBatch = (txs: readonly Transaction[]) =>
+    setDialog({
+      kind: "batch",
+      ids: txs.map((tx) => tx.id),
+      following: hasFollowingInstallments(txs),
+      summary: selectionSummary(txs),
+    });
+
   const pending = loading || stale;
   const empty = data.transactions.length === 0 && data.invoices.length === 0;
 
@@ -301,6 +310,8 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
               title="Despesas fora do cartão"
               subtitle="Pix, débito, dinheiro e boletos com data no mês."
               total={{ cents: totals.outsideCents, kind: "expense" }}
+              deleteLabel="Excluir as despesas fora do cartão do mês"
+              onDelete={outside.expenses.length ? () => confirmBatch(outside.expenses) : undefined}
               transactions={outside.expenses}
               empty={hasFilters ? "Nenhuma despesa fora do cartão com esses filtros." : "Nenhuma despesa fora do cartão neste mês."}
               collapsed={collapsed.has("despesas")}
@@ -315,6 +326,8 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
               title="Receitas"
               subtitle="Salário e outras entradas nas contas com data no mês."
               total={{ cents: totals.incomeCents, kind: "income" }}
+              deleteLabel="Excluir as receitas do mês"
+              onDelete={outside.incomes.length ? () => confirmBatch(outside.incomes) : undefined}
               transactions={outside.incomes}
               empty={hasFilters ? "Nenhuma receita com esses filtros." : "Nenhuma receita neste mês."}
               collapsed={collapsed.has("receitas")}
@@ -329,6 +342,8 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
                 icon={ArrowLeftRight}
                 title="Transferências"
                 subtitle="Entre contas e pagamentos de fatura. Não entram nos totais (o gasto do cartão já está na fatura)."
+                deleteLabel="Excluir as transferências do mês"
+                onDelete={() => confirmBatch(outside.transfers)}
                 transactions={outside.transfers}
                 empty=""
                 collapsed={collapsed.has("transferencias")}
@@ -358,14 +373,7 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
             </Button>
             <Button
               variant="destructive"
-              onClick={() =>
-                setDialog({
-                  kind: "batch",
-                  ids: selectedVisible.map((tx) => tx.id),
-                  following: hasFollowingInstallments(selectedVisible),
-                  summary: selectionSummary(selectedVisible),
-                })
-              }
+              onClick={() => confirmBatch(selectedVisible)}
             >
               <Trash2 aria-hidden />
               Excluir selecionados ({selectedVisible.length})
@@ -553,6 +561,8 @@ function Section({
   subtitle,
   empty,
   total,
+  deleteLabel,
+  onDelete,
   ...props
 }: SectionProps & {
   id: string;
@@ -561,6 +571,8 @@ function Section({
   subtitle: string;
   empty: string;
   total?: { cents: number; kind: "expense" | "income" };
+  deleteLabel?: string;
+  onDelete?: () => void;
 }) {
   const bodyId = `secao-${id}`;
   return (
@@ -580,15 +592,38 @@ function Section({
             </span>
           </p>
         </div>
-        {total ? (
-          <p className="ml-auto pt-1 text-[17px] font-semibold">
-            <span className="sr-only">Total: </span>
-            <Money cents={total.cents} kind={total.kind} />
-          </p>
-        ) : null}
+        <HeaderEnd total={total} deleteLabel={deleteLabel} onDelete={onDelete} />
       </header>
       <SectionBody id={bodyId} empty={empty} label={title} {...props} />
     </section>
+  );
+}
+
+// Canto direito do cabeçalho de toda seção: total (Geist Mono) e lixeira só com ícone.
+function HeaderEnd({
+  total,
+  deleteLabel,
+  onDelete,
+}: {
+  total?: { cents: number; kind: "expense" | "income" };
+  deleteLabel?: string;
+  onDelete?: () => void;
+}) {
+  if (!total && !onDelete) return null;
+  return (
+    <div className="ml-auto flex items-center gap-1">
+      {total ? (
+        <p className="text-[17px] font-semibold">
+          <span className="sr-only">Total: </span>
+          <Money cents={total.cents} kind={total.kind} />
+        </p>
+      ) : null}
+      {onDelete ? (
+        <Button variant="ghost" size="icon" onClick={onDelete} aria-label={deleteLabel} title={deleteLabel}>
+          <Trash2 aria-hidden />
+        </Button>
+      ) : null}
+    </div>
   );
 }
 
@@ -634,19 +669,14 @@ function InvoiceSection({
             Fatura {status}. Inclui parcelas de compras antigas que caíram nesta fatura.
           </p>
         </div>
-        {onDeleteInvoice ? (
-          <Button variant="outline" onClick={onDeleteInvoice} className="ml-auto">
-            <Trash2 aria-hidden />
-            Excluir fatura
-          </Button>
-        ) : null}
+        <HeaderEnd
+          total={{ cents: invoice.chargesCents, kind: invoice.chargesCents >= 0 ? "expense" : "income" }}
+          deleteLabel={`Excluir fatura ${card.name} de ${monthName(month)}`}
+          onDelete={onDeleteInvoice}
+        />
       </header>
 
-      <dl className="grid grid-cols-3 gap-3 rounded-xl bg-background p-3 text-sm md:max-w-xl">
-        <div className="flex flex-col gap-0.5">
-          <dt className="text-[12px] text-muted-foreground">Total</dt>
-          <dd className="font-medium"><Money cents={invoice.chargesCents} /></dd>
-        </div>
+      <dl className="grid grid-cols-2 gap-3 rounded-xl bg-background p-3 text-sm md:max-w-sm">
         <div className="flex flex-col gap-0.5">
           <dt className="text-[12px] text-muted-foreground">Pago</dt>
           <dd className="font-medium"><Money cents={invoice.paidCents} /></dd>
