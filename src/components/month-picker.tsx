@@ -4,14 +4,13 @@ import { Popover } from "@base-ui/react/popover";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { addMonthsToRef } from "@/lib/finance/billing";
 import { formatMonthLong, parseYearMonth } from "@/lib/finance/dates";
 import { cn } from "@/lib/utils";
 
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const pad = (n: number) => String(n).padStart(2, "0");
 
-// ‹ mês › com o nome clicável: abre uma grade de meses com troca de ano.
+// Nome do mês clicável: abre uma grade de meses com troca de ano (escolha direta, sem setas).
 // `onChange` recebe "YYYY-MM"; a navegação (URL, dados) fica com quem usa.
 export function MonthPicker({
   month,
@@ -32,10 +31,7 @@ export function MonthPicker({
   };
 
   return (
-    <div className="flex items-center gap-1">
-      <Button variant="ghost" size="icon" aria-label="Mês anterior" onClick={() => onChange(addMonthsToRef(month, -1))}>
-        <ChevronLeft aria-hidden />
-      </Button>
+    <div className="flex items-center">
       <Popover.Root
         open={open}
         onOpenChange={(next) => {
@@ -101,9 +97,6 @@ export function MonthPicker({
           </Popover.Positioner>
         </Popover.Portal>
       </Popover.Root>
-      <Button variant="ghost" size="icon" aria-label="Próximo mês" onClick={() => onChange(addMonthsToRef(month, 1))}>
-        <ChevronRight aria-hidden />
-      </Button>
     </div>
   );
 }
