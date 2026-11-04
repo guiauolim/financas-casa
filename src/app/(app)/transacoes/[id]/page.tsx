@@ -31,7 +31,7 @@ async function EditTransaction({ params }: Pick<PageProps<"/transacoes/[id]">, "
   const actor = await requireActor();
   const db = await createClient();
   const transaction = await getTransaction(db, { householdId: actor.householdId, transactionId: id.data });
-  if (!transaction || transaction.deletedAt) notFound();
+  if (!transaction) notFound();
   const { accounts, categories, members } = await loadFormOptions(db, actor.householdId, {
     accountIds: [transaction.account.id, transaction.transferAccount?.id],
     categoryId: transaction.category?.id,
@@ -54,6 +54,7 @@ async function EditTransaction({ params }: Pick<PageProps<"/transacoes/[id]">, "
           categoryId: transaction.category?.id ?? null,
           installment: transaction.installment,
           spentBy: transaction.spentBy,
+          invoiceRef: transaction.invoiceRef,
         }}
         accounts={accounts}
         categories={categories}

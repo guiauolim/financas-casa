@@ -1,4 +1,5 @@
 import "server-only";
+import type { CardCycle, InvoiceNaming } from "@/lib/finance/billing";
 import type { AccountInput, AccountKind } from "@/lib/validation/accounts";
 import { ServiceError, throwIf } from "./errors";
 import type { Actor, Db } from "./types";
@@ -10,6 +11,7 @@ export type Account = {
   ownerUserId: string | null;
   closingDay: number | null;
   dueDay: number | null;
+  invoiceNaming: InvoiceNaming; // nome da fatura: mês do fechamento ou do vencimento
   creditLimitCents: number | null;
   openingBalanceCents: number;
   openingBalanceDate: string | null;
@@ -18,7 +20,7 @@ export type Account = {
 };
 
 const COLUMNS =
-  "id, name, kind, owner_user_id, closing_day, due_day, credit_limit_cents, opening_balance_cents, opening_balance_date, aliases, archived";
+  "id, name, kind, owner_user_id, closing_day, due_day, invoice_naming, credit_limit_cents, opening_balance_cents, opening_balance_date, aliases, archived";
 
 type Row = {
   id: string;
@@ -27,6 +29,7 @@ type Row = {
   owner_user_id: string | null;
   closing_day: number | null;
   due_day: number | null;
+  invoice_naming: string;
   credit_limit_cents: number | null;
   opening_balance_cents: number;
   opening_balance_date: string | null;
@@ -41,6 +44,7 @@ const toAccount = (row: Row): Account => ({
   ownerUserId: row.owner_user_id,
   closingDay: row.closing_day,
   dueDay: row.due_day,
+  invoiceNaming: row.invoice_naming === "due" ? "due" : "closing",
   creditLimitCents: row.credit_limit_cents,
   openingBalanceCents: row.opening_balance_cents,
   openingBalanceDate: row.opening_balance_date,
@@ -62,6 +66,12 @@ export async function listAccounts(
     .map(toAccount)
     .sort((a, b) => KIND_ORDER.indexOf(a.kind) - KIND_ORDER.indexOf(b.kind) || a.name.localeCompare(b.name, "pt-BR"));
 }
+
+// Cartão com ciclo cadastrado (melhor dia de compra e vencimento): só esses têm fatura.
+export type CycleCard = Account & CardCycle;
+
+export const isCycleCard = (account: Account): account is CycleCard =>
+  account.kind === "credit_card" && account.closingDay !== null && account.dueDay !== null;
 
 export async function getAccount(db: Db, { householdId, accountId }: { householdId: string; accountId: string }) {
   const { data, error } = await db
@@ -95,6 +105,7 @@ function toRow(input: AccountInput) {
     aliases: input.aliases,
     closing_day: card ? input.closingDay : null,
     due_day: card ? input.dueDay : null,
+    ...(card ? { invoice_naming: input.invoiceNaming } : {}),
     credit_limit_cents: card ? (input.creditLimitCents ?? null) : null,
     opening_balance_cents: card ? 0 : input.openingBalanceCents,
     opening_balance_date: card ? null : (input.openingBalanceDate ?? null),

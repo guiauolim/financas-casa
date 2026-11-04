@@ -155,7 +155,7 @@ const input = (overrides: Partial<PlanInput> = {}): PlanInput => ({
   ]),
   categories: CATEGORIES,
   rules: [],
-  existing: new Map(),
+  existing: new Set<string>(),
   ...overrides,
 });
 
@@ -208,7 +208,7 @@ describe("planCardImport", () => {
 
   it("reimportar a mesma fatura marca tudo como duplicado", () => {
     const first = planCardImport(input());
-    const existing = new Map(first.lines.filter((l) => l.include).map((l) => [l.hash, { deleted: false }]));
+    const existing = new Set(first.lines.filter((l) => l.include).map((l) => l.hash));
     const again = planCardImport(input({ existing }));
     const real = again.lines.filter((l) => !l.future && l.kind !== "payment");
     expect(real.every((l) => l.status === "duplicate" && l.duplicateOf === "existing" && !l.include)).toBe(true);
@@ -221,11 +221,14 @@ describe("planCardImport", () => {
     expect(plan.lines.filter((l) => l.statementIndex === 1 && l.kind !== "payment").every((l) => l.duplicateOf === "batch")).toBe(true);
   });
 
-  it("apagado (lixeira) não volta", () => {
+  it("sem lixeira: linha excluída volta ao reimportar a mesma fatura", () => {
     const first = planCardImport(input());
     const target = find(first, "Supermercado Exemplobrasiliabra")[0]!;
-    const plan = planCardImport(input({ existing: new Map([[target.hash, { deleted: true }]]) }));
-    expect(find(plan, "Supermercado Exemplobrasiliabra")[0]).toMatchObject({ status: "duplicate", duplicateOf: "trash" });
+    // Gravou tudo e depois excluiu o mercado: ele não está mais entre os existentes.
+    const existing = new Set(first.lines.filter((l) => l.include && l.hash !== target.hash).map((l) => l.hash));
+    const plan = planCardImport(input({ existing }));
+    expect(find(plan, "Supermercado Exemplobrasiliabra")[0]).toMatchObject({ status: "new", include: true });
+    expect(plan.lines.filter((l) => l.status === "new" && !l.future).map((l) => l.hash)).toEqual([target.hash]);
   });
 
   it("parcelas futuras: geradas depois da última vista e deduplicadas na próxima fatura", () => {
@@ -242,7 +245,7 @@ describe("planCardImport", () => {
     expect(planCardImport(input()).lines.filter((l) => l.future).every((l) => !l.include)).toBe(true);
 
     // Gravou fatura 1 + futuras; a fatura 2 traz 2/3 e 3/4 reais → duplicadas.
-    const existing = new Map(first.lines.filter((l) => l.include).map((l) => [l.hash, { deleted: false }]));
+    const existing = new Set(first.lines.filter((l) => l.include).map((l) => l.hash));
     const second = planCardImport(input({ files: parseAll(FATURA_2), existing }));
     expect(find(second, "Mp *Lojaficticiacuritibabra", 2)[0]).toMatchObject({ status: "duplicate", future: false });
     expect(find(second, "Moveis Inventadoscuritibabra", 3)[0]).toMatchObject({ status: "duplicate" });
@@ -263,11 +266,50 @@ describe("planCardImport", () => {
       ["2026-03-10", 71103, 71103, 0],
       ["2026-04-10", 77240, 77240, 0],
     ]);
-    expect(plan.statements[0]!.closingDate).toBe("2026-03-03");
+    // Melhor dia 3 → fecha na véspera; a fatura que vence 10/03 é a "2026-03".
+    expect(plan.statements[0]).toMatchObject({ closingDate: "2026-03-02", invoiceRef: "2026-03" });
 
     const [statement] = parseCardStatement(FATURA_1);
     const tampered = { statements: [{ ...statement!, totalCents: 80000 }] };
     expect(planCardImport(input({ files: [tampered] })).statements[0]!.differenceCents).toBe(80000 - 71103);
+  });
+
+  it("cada linha fica na fatura do ARQUIVO; parcelas futuras nas faturas seguintes", () => {
+    const plan = planCardImport(input({ files: parseAll(FATURA_1, FATURA_2) }));
+    const fileLines = plan.lines.filter((l) => !l.future && l.kind !== "payment");
+    expect(new Set(fileLines.filter((l) => l.statementIndex === 0).map((l) => l.invoiceRef))).toEqual(new Set(["2026-03"]));
+    expect(new Set(fileLines.filter((l) => l.statementIndex === 1).map((l) => l.invoiceRef))).toEqual(new Set(["2026-04"]));
+    // Parcela de compra antiga (data original em janeiro) fica na fatura em que apareceu.
+    const [m3] = find(plan, "Moveis Inventadoscuritibabra", 3).filter((l) => !l.future);
+    expect(m3).toMatchObject({ purchaseDate: "2026-01-12", invoiceRef: "2026-04" });
+
+    // Só a fatura de março: Loja 1/3 está nela; 2/3 e 3/3 são geradas em abril e maio.
+    const single = planCardImport(input());
+    expect(find(single, "Mp *Lojaficticiacuritibabra").map((l) => [l.installment!.number, l.future, l.invoiceRef])).toEqual([
+      [1, false, "2026-03"],
+      [2, true, "2026-04"],
+      [3, true, "2026-05"],
+    ]);
+  });
+
+  it("fatura do arquivo mesmo quando o melhor dia cadastrado diria outra", () => {
+    // Melhor dia 25, vence dia 10: o arquivo que vence 10/03 é a fatura de fevereiro (fecha 24/02);
+    // pelo cálculo, compras de 25/02 em diante iriam para março — mas ficam na do arquivo.
+    const plan = planCardImport(input({ card: { closingDay: 25, dueDay: 10 } }));
+    expect(plan.statements[0]!.invoiceRef).toBe("2026-02");
+    const fileLines = plan.lines.filter((l) => !l.future && l.kind !== "payment");
+    expect(fileLines.every((l) => l.invoiceRef === "2026-02")).toBe(true);
+    expect(plan.statements[0]!.otherInvoiceCount).toBeGreaterThan(0);
+  });
+
+  it("pagamento lançado como transferência paga a fatura anterior à do arquivo", () => {
+    const plan = planCardImport(input({ paymentAccountId: "00000000-0000-4000-8000-0000000000aa" }));
+    expect(find(plan, "Pagamento Com Saldo")[0]).toMatchObject({ type: "transfer", invoiceRef: "2026-02", include: true });
+  });
+
+  it("sem ciclo cadastrado, a fatura é o mês anterior ao vencimento", () => {
+    const plan = planCardImport(input({ card: null }));
+    expect(plan.statements[0]).toMatchObject({ invoiceRef: "2026-02", closingDate: null });
   });
 
   it("avisa linhas que o fechamento cadastrado põe em outra fatura", () => {

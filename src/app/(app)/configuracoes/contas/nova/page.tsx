@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { FormSkeleton, Panel } from "@/components/panel";
 import { requireActor } from "@/lib/auth/session";
+import { todayInSaoPaulo } from "@/lib/finance/dates";
 import { listMembers } from "@/lib/services/households";
 import { createClient } from "@/lib/supabase/server";
 import { AccountForm } from "../account-form";
@@ -21,7 +22,7 @@ async function NewAccount() {
   const members = await listMembers(await createClient(), { householdId: actor.householdId });
   return (
     <Panel title="Nova conta ou cartão" className="max-w-2xl">
-      <AccountForm members={members} />
+      <AccountForm members={members} today={todayInSaoPaulo()} />
     </Panel>
   );
 }

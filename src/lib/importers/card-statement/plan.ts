@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { type CardCycle, invoiceByReference, invoiceFor } from "@/lib/finance/billing";
+import { addMonthsToRef, type CardCycle, invoiceByDueMonth, invoiceFor } from "@/lib/finance/billing";
 import { type CategorizeCategory, categorize, findCategoryByName, merchantPattern, type MerchantRule } from "@/lib/finance/categorize";
-import { addMonthsToDate, parseYearMonth } from "@/lib/finance/dates";
+import { addMonthsToDate } from "@/lib/finance/dates";
 import { defaultSpentBy, type SpentBy } from "@/lib/finance/spent-by";
 import type { CardStatement, StatementLine, StatementLineKind } from "./types";
 
@@ -18,6 +18,10 @@ import type { CardStatement, StatementLine, StatementLineKind } from "./types";
 // `ordinal` = n-ésima linha idêntica na mesma fatura (duas compras iguais no mesmo dia).
 // O installment_group_id é um UUID derivado da mesma compra (sem k), então a mesma compra
 // em faturas e importações diferentes cai sempre no mesmo grupo.
+//
+// Fatura (invoice_ref): cada linha fica na fatura do ARQUIVO (não recalcula pela data — parcela de
+// compra antiga aparece com a data original); parcelas futuras geradas vão para as faturas
+// seguintes em sequência; o pagamento lançado como transferência paga a fatura anterior à do arquivo.
 
 export type PlanCategory = CategorizeCategory & { householdDefault: boolean };
 
@@ -32,6 +36,7 @@ export type PlannedLine = {
   description: string;
   purchaseDate: string;
   occurredOn: string;
+  invoiceRef: string; // fatura ("YYYY-MM" do fechamento): a do arquivo; futuras = as seguintes
   amountCents: number; // sempre positivo
   cardLast4: string | null;
   holderKind: StatementLine["holderKind"];
@@ -43,7 +48,7 @@ export type PlannedLine = {
   pattern: string; // trecho para "lembrar para próximas"
   spentBy: SpentBy;
   status: LineStatus;
-  duplicateOf: "batch" | "existing" | "trash" | null;
+  duplicateOf: "batch" | "existing" | null;
   future: boolean; // parcela futura (opção "criar parcelas futuras")
   include: boolean;
   transferFromAccountId: string | null; // pagamento criado como transferência
@@ -55,11 +60,12 @@ export type StatementSummary = {
   sheet: string;
   title: string | null;
   dueDate: string;
-  closingDate: string | null; // pelo closing_day do cartão
+  invoiceRef: string; // fatura do arquivo ("YYYY-MM" do fechamento), pelo vencimento e o ciclo do cartão
+  closingDate: string | null; // pelo melhor dia de compra do cartão
   fileTotalCents: number | null;
   linesTotalCents: number; // compras + encargos − créditos (sem o pagamento)
   differenceCents: number | null; // total do arquivo − soma das linhas
-  otherInvoiceCount: number; // linhas que o closing_day do cartão põe em outra fatura
+  otherInvoiceCount: number; // linhas que o cálculo pelo melhor dia de compra poria em outra fatura
   paidDetected: boolean; // arquivo de "Fatura Paga" (ou, sem título, já vencida)
   counts: Record<LineStatus, number>;
 };
@@ -84,7 +90,7 @@ export type PlanInput = {
   holders: ReadonlyMap<string, string>; // final -> user_id
   categories: readonly PlanCategory[];
   rules: readonly MerchantRule[];
-  existing: ReadonlyMap<string, { deleted: boolean }>; // import_hash já no banco
+  existing: ReadonlySet<string>; // import_hash já no banco (o que foi excluído não está aqui)
   overrides?: ReadonlyMap<string, LineOverride>;
   paymentAccountId?: string | null; // cria pagamentos como transferência desta conta
   includeFuture?: boolean; // inclui as parcelas futuras geradas
@@ -169,11 +175,10 @@ export function planCardImport(input: PlanInput): CardImportPlan {
     }
     line.isOther = line.type === "expense" && (!line.categoryId || line.categoryId === otherCategory?.id);
 
-    const found = existing.get(line.hash);
     if (line.status !== "ignored") {
-      if (found) {
+      if (existing.has(line.hash)) {
         line.status = "duplicate";
-        line.duplicateOf = found.deleted ? "trash" : "existing";
+        line.duplicateOf = "existing";
       } else if (seen.has(line.hash)) {
         line.status = "duplicate";
         line.duplicateOf = "batch";
@@ -186,6 +191,10 @@ export function planCardImport(input: PlanInput): CardImportPlan {
   };
 
   statements.forEach(({ s, fileIndex }, index) => {
+    // Sem ciclo cadastrado: a fatura que vence num mês costuma fechar no mês anterior.
+    const dueMonth = s.dueDate.slice(0, 7);
+    const statementInvoice = card ? invoiceByDueMonth(dueMonth, card) : null;
+    const statementRef = statementInvoice?.ref ?? addMonthsToRef(dueMonth, -1);
     const ordinals = new Map<string, number>();
     const counts: Record<LineStatus, number> = { new: 0, duplicate: 0, ignored: 0 };
     let linesTotalCents = 0;
@@ -209,7 +218,11 @@ export function planCardImport(input: PlanInput): CardImportPlan {
 
       if (!isPayment) {
         linesTotalCents += raw.amountCents;
-        if (card && invoiceFor(occurredOn, card).reference !== s.dueDate.slice(0, 7)) otherInvoiceCount++;
+        if (card) {
+          const calculated = invoiceFor(raw.date, card).ref;
+          const expected = raw.installment ? addMonthsToRef(calculated, raw.installment.number - 1) : calculated;
+          if (expected !== statementRef) otherInvoiceCount++;
+        }
       }
 
       const line = finalize({
@@ -221,6 +234,7 @@ export function planCardImport(input: PlanInput): CardImportPlan {
         description: raw.description,
         purchaseDate: raw.date,
         occurredOn,
+        invoiceRef: isPayment ? addMonthsToRef(statementRef, -1) : statementRef,
         amountCents: Math.abs(raw.amountCents),
         cardLast4: raw.cardLast4,
         holderKind: raw.holderKind,
@@ -246,14 +260,14 @@ export function planCardImport(input: PlanInput): CardImportPlan {
       }
     }
 
-    const closingDate = card ? invoiceByReference(parseYearMonth(s.dueDate.slice(0, 7))!, card).closingDate : null;
     summaries.push({
       index,
       fileIndex,
       sheet: s.sheet,
       title: s.title,
       dueDate: s.dueDate,
-      closingDate,
+      invoiceRef: statementRef,
+      closingDate: statementInvoice?.closingDate ?? null,
       fileTotalCents: s.totalCents,
       linesTotalCents,
       differenceCents: s.totalCents === null ? null : s.totalCents - linesTotalCents,
@@ -275,6 +289,7 @@ export function planCardImport(input: PlanInput): CardImportPlan {
           hash: sha256(`${key}|${ordinal}`),
           row: null,
           occurredOn: addMonthsToDate(last.purchaseDate, k - 1),
+          invoiceRef: addMonthsToRef(last.invoiceRef, k - number),
           installment: { number: k, total, groupId },
           status: "new",
           duplicateOf: null,

@@ -1,5 +1,6 @@
 import "server-only";
 import {
+  type BudgetContext,
   type BudgetRule,
   type EvaluatedBudget,
   evaluateBudget,
@@ -11,6 +12,8 @@ import type { YearMonth } from "@/lib/finance/dates";
 import type { LedgerEntry } from "@/lib/finance/ledger";
 import { type BudgetInput, budgetColumns } from "@/lib/validation/budgets";
 import { isUniqueViolation, ServiceError, throwIf } from "./errors";
+import { invoiceMonthOf } from "@/lib/finance/spending-view";
+import { isCycleCard, listAccounts } from "./accounts";
 import { listLedger } from "./transactions";
 import type { Actor, Db } from "./types";
 
@@ -161,13 +164,14 @@ export type BudgetStatusReport = {
 export function buildBudgetStatus(
   budgets: readonly Budget[],
   ledger: readonly LedgerEntry[],
-  { month, today }: { month: YearMonth; today: string },
+  context: BudgetContext,
 ): BudgetStatusReport {
-  const evaluated = budgets.map((b) => ({ ...b, ...evaluateBudget(b, ledger, { month, today }) }));
+  const { month, today } = context;
+  const evaluated = budgets.map((b) => ({ ...b, ...evaluateBudget(b, ledger, context) }));
   return {
     month,
     today,
-    projection: monthProjection(ledger, { month, today }),
+    projection: monthProjection(ledger, context),
     total: evaluated.find((b) => b.scope === "total") ?? null,
     categories: evaluated
       .filter((b) => b.scope === "category")
@@ -180,10 +184,22 @@ export function buildBudgetStatus(
 }
 
 // Usado pela tela de Orçamentos e (Fase 7) pela tool get_budget_status do bot.
+// No cartão, o gasto conta no mês da fatura (lib/finance/spending-view); o semanal, pela data.
 export async function getBudgetStatus(
   db: Db,
-  { householdId, month, today }: { householdId: string; month: YearMonth; today: string },
+  {
+    householdId,
+    month,
+    today,
+  }: { householdId: string; month: YearMonth; today: string },
 ): Promise<BudgetStatusReport> {
-  const [budgets, ledger] = await Promise.all([listBudgets(db, { householdId }), listLedger(db, { householdId })]);
-  return buildBudgetStatus(budgets, ledger, { month, today });
+  const [budgets, ledger, accounts] = await Promise.all([
+    listBudgets(db, { householdId }),
+    listLedger(db, { householdId }),
+    listAccounts(db, { householdId, includeArchived: true }),
+  ]);
+  const monthOf = invoiceMonthOf(
+    accounts.filter(isCycleCard).map((c) => ({ id: c.id, closingDay: c.closingDay, dueDay: c.dueDay, naming: c.invoiceNaming })),
+  );
+  return buildBudgetStatus(budgets, ledger, { month, today, monthOf });
 }

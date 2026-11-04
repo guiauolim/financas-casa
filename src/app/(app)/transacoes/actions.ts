@@ -6,12 +6,19 @@ import { z } from "zod";
 import type { ActionResult } from "@/components/action-button";
 import { invalidState, serviceErrorState } from "@/lib/actions";
 import { requireActor } from "@/lib/auth/session";
-import { createTransaction, deleteTransaction, restoreTransaction, updateTransaction } from "@/lib/services/transactions";
+import {
+  createTransaction,
+  deleteInvoiceTransactions,
+  deleteTransaction,
+  deleteTransactions,
+  updateTransaction,
+} from "@/lib/services/transactions";
 import { createClient } from "@/lib/supabase/server";
 import { type FormState, formValues } from "@/lib/validation/form";
 import { scopeSchema, TRANSACTION_FORM_FIELDS, transactionSchema } from "@/lib/validation/transactions";
 
 const targetSchema = z.object({ id: z.uuid(), scope: scopeSchema });
+const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
 
 export async function saveTransactionAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const actor = await requireActor();
@@ -32,36 +39,52 @@ export async function saveTransactionAction(_prev: FormState, formData: FormData
   redirect(`/transacoes?mes=${parsed.data.occurredOn.slice(0, 7)}`);
 }
 
+// Excluir da tela de edição: apaga de vez e volta para a lista do mês.
 export async function deleteTransactionAction(formData: FormData): Promise<ActionResult> {
   const actor = await requireActor();
   const parsed = targetSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) return { error: "Pedido inválido." };
-  const month = z
-    .string()
-    .regex(/^\d{4}-\d{2}$/)
-    .safeParse(formData.get("month")).data;
+  const month = monthSchema.safeParse(formData.get("month")).data;
   try {
     await deleteTransaction(await createClient(), actor, parsed.data.id, parsed.data.scope);
   } catch (error) {
     return serviceErrorState(error, "Não foi possível excluir o lançamento.");
   }
-  if (formData.get("stay") === "1") {
-    refresh();
-    return { success: "Lançamento movido para a lixeira." };
-  }
   redirect(month ? `/transacoes?mes=${month}` : "/transacoes");
 }
 
-export async function restoreTransactionAction(formData: FormData): Promise<ActionResult> {
+export type DeleteResult = { error: string } | { deleted: number };
+
+const failure = (error: unknown, fallback: string): DeleteResult => ({ error: serviceErrorState(error, fallback).error ?? fallback });
+
+const batchSchema = z.object({ ids: z.array(z.uuid()).min(1).max(2000), scope: scopeSchema });
+
+// Exclusão em lote (definitiva). refresh(): a tela recebe o mês atualizado na mesma resposta.
+export async function deleteTransactionsAction(input: { ids: string[]; scope: string }): Promise<DeleteResult> {
   const actor = await requireActor();
-  const parsed = targetSchema.safeParse(Object.fromEntries(formData));
+  const parsed = batchSchema.safeParse(input);
   if (!parsed.success) return { error: "Pedido inválido." };
-  let restored = 0;
   try {
-    restored = await restoreTransaction(await createClient(), actor, parsed.data.id, parsed.data.scope);
+    const deleted = await deleteTransactions(await createClient(), actor, parsed.data);
+    refresh();
+    return { deleted };
   } catch (error) {
-    return serviceErrorState(error, "Não foi possível restaurar o lançamento.");
+    return failure(error, "Não foi possível excluir os lançamentos.");
   }
-  refresh();
-  return { success: restored === 1 ? "Lançamento restaurado." : `${restored} lançamentos restaurados.` };
+}
+
+const invoiceSchema = z.object({ accountId: z.uuid(), ref: monthSchema });
+
+// "Excluir fatura": todos os lançamentos do cartão nesta fatura.
+export async function deleteInvoiceAction(input: { accountId: string; ref: string }): Promise<DeleteResult> {
+  const actor = await requireActor();
+  const parsed = invoiceSchema.safeParse(input);
+  if (!parsed.success) return { error: "Pedido inválido." };
+  try {
+    const deleted = await deleteInvoiceTransactions(await createClient(), actor, parsed.data);
+    refresh();
+    return { deleted };
+  } catch (error) {
+    return failure(error, "Não foi possível excluir a fatura.");
+  }
 }

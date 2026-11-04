@@ -1,5 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
+import type { InvoiceNaming } from "@/lib/finance/billing";
 import { merchantPattern } from "@/lib/finance/categorize";
 import type { SpentBy } from "@/lib/finance/spent-by";
 import { CardImportError, type CardStatement, parseCardStatement } from "@/lib/importers/card-statement";
@@ -34,7 +35,7 @@ export type CardImportRequest = {
 
 export type CardImportPreview = CardImportPlan & {
   fingerprints: string[];
-  card: { id: string; name: string; closingDay: number | null; dueDay: number | null };
+  card: { id: string; name: string; closingDay: number | null; dueDay: number | null; invoiceNaming: InvoiceNaming };
   holders: { last4: string; userId: string | null; saved: boolean }[];
 };
 
@@ -52,7 +53,7 @@ function parseFile(file: StatementFile): CardStatement[] {
 async function loadAccount(db: Db, householdId: string, accountId: string, field: string) {
   const { data, error } = await db
     .from("accounts")
-    .select("id, name, kind, closing_day, due_day, archived")
+    .select("id, name, kind, closing_day, due_day, invoice_naming, archived")
     .eq("household_id", householdId)
     .eq("id", accountId)
     .maybeSingle();
@@ -62,19 +63,19 @@ async function loadAccount(db: Db, householdId: string, accountId: string, field
   return data;
 }
 
-// Hashes da importação que já estão no banco (inclusive na lixeira), em lotes para não
-// estourar o tamanho da URL do PostgREST.
+// Hashes da importação que já estão no banco, em lotes para não estourar o tamanho da URL do
+// PostgREST. Sem lixeira: o que foi excluído não está aqui e volta se a fatura for reimportada.
 async function existingHashes(db: Db, householdId: string, hashes: string[]) {
-  const found = new Map<string, { deleted: boolean }>();
+  const found = new Set<string>();
   const unique = [...new Set(hashes)];
   for (let i = 0; i < unique.length; i += 100) {
     const { data, error } = await db
       .from("transactions")
-      .select("import_hash, deleted_at")
+      .select("import_hash")
       .eq("household_id", householdId)
       .in("import_hash", unique.slice(i, i + 100));
     throwIf(error);
-    for (const row of data ?? []) if (row.import_hash) found.set(row.import_hash, { deleted: row.deleted_at !== null });
+    for (const row of data ?? []) if (row.import_hash) found.add(row.import_hash);
   }
   return found;
 }
@@ -120,7 +121,7 @@ async function prepare(
 
   // Finais -> pessoa: o escolhido na tela; senão o salvo/sugerido.
   const known = new Map(savedHolders.map((h) => [h.lastDigits, h.userId]));
-  const draft = planCardImport({ ...baseInput, holders: new Map(), existing: new Map() });
+  const draft = planCardImport({ ...baseInput, holders: new Map(), existing: new Set<string>() });
   const suggested = suggestHolders(draft.finals, members, known);
   const chosen = new Map<string, string | null>(suggested);
   for (const holder of request.holders ?? []) {
@@ -129,7 +130,7 @@ async function prepare(
   }
   const holders = new Map([...chosen].filter((entry): entry is [string, string] => Boolean(entry[1])));
 
-  const draftWithHolders = planCardImport({ ...baseInput, holders, existing: new Map() });
+  const draftWithHolders = planCardImport({ ...baseInput, holders, existing: new Set<string>() });
   const existing = await existingHashes(db, actor.householdId, draftWithHolders.lines.map((l) => l.hash));
   const plan = planCardImport({ ...baseInput, holders, existing });
 
@@ -147,7 +148,13 @@ export async function previewCardImport(db: Db, actor: Actor, request: CardImpor
   return {
     ...plan,
     fingerprints: request.files.map((f) => fingerprintOf(f.bytes)),
-    card: { id: account.id, name: account.name, closingDay: account.closing_day, dueDay: account.due_day },
+    card: {
+      id: account.id,
+      name: account.name,
+      closingDay: account.closing_day,
+      dueDay: account.due_day,
+      invoiceNaming: account.invoice_naming === "due" ? "due" : "closing",
+    },
     holders,
   };
 }
@@ -203,6 +210,7 @@ export async function applyCardImport(
       amount_cents: line.amountCents,
       description: line.description.slice(0, 200),
       occurred_on: line.occurredOn,
+      invoice_ref: line.invoiceRef,
       category_id: line.type === "transfer" ? null : line.categoryId,
       spent_by: line.type === "transfer" ? null : line.spentBy,
       card_last_digits: line.type === "transfer" ? null : line.cardLast4,
@@ -217,6 +225,7 @@ export async function applyCardImport(
     p_rules: [...rules].map(([pattern, categoryId]) => ({ pattern, category_id: categoryId })),
     p_statements: plan.statements.map((s) => ({
       due_date: s.dueDate,
+      invoice_ref: s.invoiceRef,
       total_cents: s.fileTotalCents,
       paid: request.decisions.paidDueDates ? request.decisions.paidDueDates.includes(s.dueDate) : s.paidDetected,
       hashes: items.filter((l) => l.statementIndex === s.index && !l.future).map((l) => l.hash),

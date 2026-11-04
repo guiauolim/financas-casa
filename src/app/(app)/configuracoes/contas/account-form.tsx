@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useActionState, useState } from "react";
-import { AmountField, Field, FormError, SelectField } from "@/components/form";
+import { AmountField, Field, FormError, Segmented, SelectField } from "@/components/form";
+import { INVOICE_NAMING_LABELS, INVOICE_NAMINGS, type InvoiceNaming, invoiceFor, invoiceLabel } from "@/lib/finance/billing";
+import { formatDate } from "@/lib/finance/dates";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { formatAmountInput } from "@/lib/finance/money";
 import { ACCOUNT_KIND_LABELS, ACCOUNT_KINDS, type AccountKind } from "@/lib/validation/accounts";
@@ -17,6 +19,7 @@ export type AccountFormValues = {
   aliases: string[];
   closingDay: number | null;
   dueDay: number | null;
+  invoiceNaming: InvoiceNaming;
   creditLimitCents: number | null;
   openingBalanceCents: number;
   openingBalanceDate: string | null;
@@ -25,12 +28,18 @@ export type AccountFormValues = {
 export function AccountForm({
   account,
   members,
+  today,
 }: {
   account?: AccountFormValues;
   members: { userId: string; displayName: string }[];
+  today: string;
 }) {
   const [state, action, pending] = useActionState(saveAccountAction, {} as FormState);
   const [kind, setKind] = useState<AccountKind>(account?.kind ?? "checking");
+  const [closingDay, setClosingDay] = useState(account?.closingDay ? String(account.closingDay) : "");
+  const [dueDay, setDueDay] = useState(account?.dueDay ? String(account.dueDay) : "");
+  const [naming, setNaming] = useState<InvoiceNaming>(account?.invoiceNaming ?? "closing");
+  const example = invoiceExample(today, closingDay, dueDay, naming);
   const isCard = kind === "credit_card";
   const errors = state.fieldErrors ?? {};
   // Não dá para trocar cartão <-> conta depois de criado.
@@ -81,13 +90,15 @@ export function AccountForm({
         <div className="grid gap-4 sm:grid-cols-3">
           <Field
             name="closingDay"
-            label="Dia do fechamento"
+            label="Melhor dia de compra"
             type="number"
             inputMode="numeric"
             min={1}
             max={31}
-            defaultValue={account?.closingDay ?? undefined}
+            value={closingDay}
+            onChange={(e) => setClosingDay(e.target.value)}
             required
+            hint="Compras a partir deste dia vão para a próxima fatura."
             error={errors.closingDay}
           />
           <Field
@@ -97,7 +108,8 @@ export function AccountForm({
             inputMode="numeric"
             min={1}
             max={31}
-            defaultValue={account?.dueDay ?? undefined}
+            value={dueDay}
+            onChange={(e) => setDueDay(e.target.value)}
             required
             error={errors.dueDay}
           />
@@ -107,9 +119,19 @@ export function AccountForm({
             defaultValue={account?.creditLimitCents ? formatAmountInput(account.creditLimitCents) : undefined}
             error={errors.creditLimitCents}
           />
-          <p className="text-[13px] text-muted-foreground sm:col-span-3">
-            Compras feitas no dia do fechamento ou depois entram na fatura seguinte. Em meses mais curtos, o
-            fechamento cai no último dia do mês.
+          <div className="sm:col-span-3">
+            <Segmented
+              name="invoiceNaming"
+              legend="Nomear fatura pelo mês do"
+              value={naming}
+              onChange={setNaming}
+              options={INVOICE_NAMINGS.map((n) => ({ value: n, label: INVOICE_NAMING_LABELS[n].toLowerCase() }))}
+              error={errors.invoiceNaming}
+            />
+          </div>
+          <p className="text-[13px] text-muted-foreground sm:col-span-3" aria-live="polite">
+            {example ??
+              "A fatura fecha na véspera do melhor dia de compra. Em meses mais curtos, o dia cai no último dia do mês."}
           </p>
         </div>
       ) : (
@@ -151,4 +173,16 @@ export function AccountForm({
       </div>
     </form>
   );
+}
+
+// Ex.: "Compras de 26/10/2026 a 25/11/2026 entram na fatura de novembro de 2026 (vence 05/12/2026)."
+function invoiceExample(today: string, closingDay: string, dueDay: string, naming: InvoiceNaming): string | null {
+  const closing = Number(closingDay);
+  const due = Number(dueDay);
+  if (!Number.isInteger(closing) || !Number.isInteger(due) || closing < 1 || closing > 31 || due < 1 || due > 31) return null;
+  const invoice = invoiceFor(today, { closingDay: closing, dueDay: due });
+  return `Hoje: compras de ${formatDate(invoice.periodStart)} a ${formatDate(invoice.periodEnd)} entram na ${invoiceLabel(
+    invoice,
+    naming,
+  )} (fecha ${formatDate(invoice.closingDate)}, vence ${formatDate(invoice.dueDate)}).`;
 }

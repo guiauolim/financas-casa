@@ -1,12 +1,12 @@
 "use client";
 
-import { Info } from "lucide-react";
+import { Info, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import { AmountField, Field, FormError, Segmented, SelectField } from "@/components/form";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { invoiceFor } from "@/lib/finance/billing";
-import { formatDate, formatMonthShort, parseISODate, parseYearMonth } from "@/lib/finance/dates";
+import { type InvoiceNaming, invoiceByRef, invoiceFor, invoiceLabel, isInvoiceRef, paymentInvoiceRef } from "@/lib/finance/billing";
+import { formatDate, parseISODate } from "@/lib/finance/dates";
 import { MAX_INSTALLMENTS, splitInstallments } from "@/lib/finance/installments";
 import { defaultSpentBy, HOUSE, spentByToParam } from "@/lib/finance/spent-by";
 import { formatAmountInput, formatBRL, parseBRL } from "@/lib/finance/money";
@@ -21,6 +21,7 @@ export type FormAccount = {
   kind: AccountKind;
   closingDay: number | null;
   dueDay: number | null;
+  invoiceNaming: InvoiceNaming;
 };
 export type FormCategory = { id: string; name: string; type: TxType; householdDefault: boolean };
 export type FormMember = { userId: string; displayName: string };
@@ -36,13 +37,48 @@ export type TransactionFormValues = {
   categoryId: string | null;
   installment: { number: number; total: number; purchaseTotalCents?: number | null } | null;
   spentBy: string | null;
+  invoiceRef: string | null; // fatura gravada (ex.: a do arquivo importado)
 };
 
+const cycleOf = (account: FormAccount | undefined) =>
+  account?.kind === "credit_card" && account.closingDay && account.dueDay
+    ? { closingDay: account.closingDay, dueDay: account.dueDay }
+    : null;
+
+// "fatura de novembro de 2026 (fecha 25/11/2026, vence 05/12/2026)" — mesma regra do servidor.
 function cardInvoiceText(account: FormAccount | undefined, date: string): string | null {
-  if (account?.kind !== "credit_card" || !account.closingDay || !account.dueDay || !parseISODate(date)) return null;
-  const invoice = invoiceFor(date, { closingDay: account.closingDay, dueDay: account.dueDay });
-  const reference = parseYearMonth(invoice.reference)!;
-  return `fatura de ${formatMonthShort(reference)} (fecha ${formatDate(invoice.closingDate)}, vence ${formatDate(invoice.dueDate)})`;
+  const cycle = cycleOf(account);
+  if (!cycle || !parseISODate(date)) return null;
+  const invoice = invoiceFor(date, cycle);
+  return `${invoiceLabel(invoice, account!.invoiceNaming)} (fecha ${formatDate(invoice.closingDate)}, vence ${formatDate(invoice.dueDate)})`;
+}
+
+function paymentInvoiceText(target: FormAccount | undefined, date: string): string | null {
+  const cycle = cycleOf(target);
+  if (!cycle || !parseISODate(date)) return null;
+  const invoice = invoiceByRef(paymentInvoiceRef(date, cycle), cycle);
+  const due = `${invoice.dueDate < date ? "venceu" : "vence"} ${formatDate(invoice.dueDate)}`;
+  return `${invoiceLabel(invoice, target!.invoiceNaming)} (${due})`;
+}
+
+// Edição que muda data ou cartão: a fatura gravada é recalculada pela nova data.
+function invoiceChangeText(
+  transaction: TransactionFormValues | undefined,
+  account: FormAccount | undefined,
+  date: string,
+): string | null {
+  if (!transaction || transaction.type === "transfer") return null;
+  if (date === transaction.occurredOn && account?.id === transaction.accountId) return null;
+  const cycle = cycleOf(account);
+  if (!cycle || !parseISODate(date)) return null;
+  const next = invoiceFor(date, cycle);
+  const before =
+    transaction.invoiceRef && isInvoiceRef(transaction.invoiceRef) && transaction.accountId === account!.id
+      ? invoiceLabel(invoiceByRef(transaction.invoiceRef, cycle), account!.invoiceNaming)
+      : null;
+  const nextLabel = invoiceLabel(next, account!.invoiceNaming);
+  if (before === nextLabel) return `A fatura será recalculada pela nova data e continua na ${nextLabel}.`;
+  return `A fatura será recalculada pela nova data: passa para a ${nextLabel}${before ? ` (estava na ${before})` : ""}.`;
 }
 
 export function TransactionForm({
@@ -96,6 +132,8 @@ export function TransactionForm({
   }
   const invoiceText = type === "expense" ? cardInvoiceText(account, date) : null;
   const isBillPayment = type === "transfer" && target?.kind === "credit_card";
+  const paymentText = isBillPayment ? paymentInvoiceText(target, date) : null;
+  const changeText = invoiceChangeText(transaction, account, date);
 
   const accountOptions = (exclude?: string) =>
     accounts
@@ -189,8 +227,9 @@ export function TransactionForm({
             <Info className="mt-0.5 size-4 shrink-0" strokeWidth={2} aria-hidden />
             {isBillPayment ? (
               <span>
-                <strong>Pagamento de fatura.</strong> Pagar a fatura é uma transferência da conta para o cartão: os
-                gastos já foram contados nas compras, então o pagamento não entra de novo como saída.
+                <strong>Pagamento de fatura{paymentText ? `: ${paymentText}` : ""}.</strong> Pagar a fatura é uma
+                transferência da conta para o cartão: os gastos já foram contados nas compras, então o pagamento não
+                entra de novo como saída.
               </span>
             ) : (
               <span>
@@ -209,7 +248,13 @@ export function TransactionForm({
             onChange={(e) => setAccountId(e.target.value)}
             required
             error={errors.accountId}
-            hint={invoiceText ? `${isNewInstallment ? "1ª parcela na" : "Entra na"} ${invoiceText}.` : undefined}
+            hint={
+              invoiceText
+                ? isNewInstallment
+                  ? `1ª parcela na ${invoiceText}; as demais nas faturas seguintes.`
+                  : `Entra na ${invoiceText}.`
+                : undefined
+            }
           >
             <option value="">Escolha a conta</option>
             {accountOptions()}
@@ -231,6 +276,16 @@ export function TransactionForm({
           </SelectField>
         </div>
       )}
+
+      {changeText ? (
+        <p
+          className="flex gap-2 rounded-lg bg-[#FBEBD9] px-3 py-2 text-[13px] text-warning-foreground"
+          role="status"
+        >
+          <TriangleAlert className="mt-0.5 size-4 shrink-0" strokeWidth={2} aria-hidden />
+          <span>{changeText}</span>
+        </p>
+      ) : null}
 
       {type !== "transfer" ? (
         <Segmented

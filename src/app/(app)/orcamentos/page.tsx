@@ -128,7 +128,8 @@ async function Budgets({ searchParams }: Pick<PageProps<"/orcamentos">, "searchP
       <Panel>
         <MonthNav month={month} href={(m) => `/orcamentos?mes=${m}`} />
         <p className="text-[13px] text-muted-foreground">
-          Conta o que foi gasto pela data da compra. Transferências, pagamentos de fatura e receitas não entram.
+          Conta o que foi gasto no mês; no cartão, pela fatura (inclusive parcelas de compras antigas). O limite
+          semanal segue a data da compra. Transferências, pagamentos de fatura e receitas não entram.
         </p>
       </Panel>
 

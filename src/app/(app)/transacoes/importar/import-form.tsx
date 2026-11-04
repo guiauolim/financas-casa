@@ -11,6 +11,7 @@ import { SpenderAvatar } from "@/components/member-avatar";
 import { Money } from "@/components/money";
 import { Panel } from "@/components/panel";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { invoiceLabel } from "@/lib/finance/billing";
 import { formatDate, formatDayMonth } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
 import { defaultSpentBy, HOUSE, spentByFromParam, spentByToParam } from "@/lib/finance/spent-by";
@@ -18,7 +19,7 @@ import type { PlannedLine } from "@/lib/importers/card-statement/plan";
 import { MAX_UPLOAD_BYTES } from "@/lib/importers/limits";
 import type { CardImportPreview } from "@/lib/services/card-import";
 import type { FormState } from "@/lib/validation/form";
-import { cn } from "@/lib/utils";
+import { capitalize, cn } from "@/lib/utils";
 import { applyCardImportAction, previewCardImportAction } from "./actions";
 
 type Card = { id: string; name: string; closingDay: number | null; dueDay: number | null };
@@ -261,7 +262,7 @@ export function CardImportForm({
             onChange={(e) => setAccountId(e.target.value)}
             hint={
               card?.closingDay && card.dueDay
-                ? `Fecha dia ${card.closingDay}, vence dia ${card.dueDay}. Titular e adicionais entram no mesmo cartão.`
+                ? `Melhor dia de compra ${card.closingDay}, vence dia ${card.dueDay}. Titular e adicionais entram no mesmo cartão.`
                 : "Titular e adicionais entram no mesmo cartão."
             }
             error={errors.accountId}
@@ -365,9 +366,16 @@ export function CardImportForm({
       <div className="grid grid-cols-[repeat(auto-fit,minmax(260px,1fr))] gap-4">
         {preview.statements.map((s) => (
           <section key={s.index} className="flex flex-col gap-2 rounded-[14px] border border-border bg-card p-5">
-            <h2 className="text-[17px] font-semibold">Fatura que vence {formatDate(s.dueDate)}</h2>
+            <h2 className="text-[17px] font-semibold">
+              {capitalize(
+                invoiceLabel(
+                  { ref: s.invoiceRef, dueMonth: s.dueDate.slice(0, 7) },
+                  preview.card.invoiceNaming,
+                ),
+              )}
+            </h2>
             <p className="text-[13px] text-muted-foreground">
-              {preview.card.name}
+              {preview.card.name} · vence <span className="font-mono">{formatDate(s.dueDate)}</span>
               {s.closingDate ? (
                 <>
                   {" "}
@@ -418,8 +426,8 @@ export function CardImportForm({
             {s.otherInvoiceCount > 0 ? (
               <p className="flex gap-1.5 rounded-lg bg-[#FBEBD9] px-3 py-2 text-[13px] text-warning-foreground">
                 <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
-                {s.otherInvoiceCount} lançamento(s) cairiam em outra fatura pelo fechamento cadastrado (dia {preview.card.closingDay}).
-                Confira o dia de fechamento do cartão.
+                {s.otherInvoiceCount} lançamento(s) cairiam em outra fatura pelo melhor dia de compra cadastrado (dia{" "}
+                {preview.card.closingDay}). Eles ficam na fatura do arquivo; confira o melhor dia de compra do cartão.
               </p>
             ) : null}
           </section>
@@ -740,11 +748,9 @@ export function CardImportForm({
 function StatusBadge({ line, include }: { line: PlannedLine; include: boolean }) {
   const label =
     line.status === "duplicate"
-      ? line.duplicateOf === "trash"
-        ? "duplicado · na lixeira"
-        : line.duplicateOf === "batch"
-          ? "duplicado no envio"
-          : "já importado"
+      ? line.duplicateOf === "batch"
+        ? "duplicado no envio"
+        : "já importado"
       : line.status === "ignored"
         ? STATUS_LABELS.ignored
         : include

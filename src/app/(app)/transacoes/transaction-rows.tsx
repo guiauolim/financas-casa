@@ -66,17 +66,42 @@ function Spender({ tx, memberIndex }: { tx: Transaction; memberIndex: (userId: s
   return <SpenderAvatar spentBy={tx.spentBy} name={tx.spentByName} index={memberIndex(tx.spentBy)} />;
 }
 
-// Tabela no desktop e lista compacta no celular. `href` null = linha sem link (lixeira).
+export type RowSelection = {
+  selected: ReadonlySet<string>;
+  onToggle: (tx: Transaction, checked: boolean) => void;
+};
+
+export const checkboxClassName = "size-5 shrink-0 cursor-pointer accent-primary";
+
+// Checkbox com área de toque de 44px.
+function RowCheckbox({ tx, selection }: { tx: Transaction; selection: RowSelection }) {
+  return (
+    <label className="-my-2 inline-flex size-11 shrink-0 cursor-pointer items-center justify-center">
+      <input
+        type="checkbox"
+        className={checkboxClassName}
+        checked={selection.selected.has(tx.id)}
+        onChange={(event) => selection.onToggle(tx, event.target.checked)}
+        aria-label={`Selecionar ${title(tx)}`}
+      />
+    </label>
+  );
+}
+
+// Tabela no desktop e lista compacta no celular. `href` null = linha sem link.
+// `selection`: checkbox por linha (exclusão em lote).
 export function TransactionRows({
   transactions,
   memberIndex,
   href = (tx) => `/transacoes/${tx.id}`,
   actions,
+  selection,
 }: {
   transactions: Transaction[];
   memberIndex: (userId: string | null) => number;
   href?: ((tx: Transaction) => string) | null;
   actions?: (tx: Transaction) => ReactNode;
+  selection?: RowSelection;
 }) {
   const label = (tx: Transaction) =>
     href ? (
@@ -96,6 +121,7 @@ export function TransactionRows({
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="text-[12px] text-muted-foreground">
             <tr className="border-b border-divider">
+              {selection ? <th scope="col" className="w-12 py-2 pr-1"><span className="sr-only">Selecionar</span></th> : null}
               <th scope="col" className="py-2 pr-3 font-medium">Data</th>
               <th scope="col" className="py-2 pr-3 font-medium">Descrição</th>
               <th scope="col" className="py-2 pr-3 font-medium">Categoria</th>
@@ -108,7 +134,12 @@ export function TransactionRows({
           </thead>
           <tbody className="divide-y divide-divider">
             {transactions.map((tx) => (
-              <tr key={tx.id}>
+              <tr key={tx.id} className={selection?.selected.has(tx.id) ? "bg-primary-soft/50" : undefined}>
+                {selection ? (
+                  <td className="py-3 pr-1">
+                    <RowCheckbox tx={tx} selection={selection} />
+                  </td>
+                ) : null}
                 <td className="py-3 pr-3 font-mono text-muted-foreground">{formatDayMonth(tx.occurredOn)}</td>
                 <td className="py-3 pr-3">
                   {label(tx)}
@@ -131,6 +162,7 @@ export function TransactionRows({
       <ul className="flex flex-col divide-y divide-divider md:hidden">
         {transactions.map((tx) => (
           <li key={tx.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+            {selection ? <RowCheckbox tx={tx} selection={selection} /> : null}
             <Spender tx={tx} memberIndex={memberIndex} />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <p className="truncate">

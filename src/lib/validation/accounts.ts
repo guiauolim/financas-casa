@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { INVOICE_NAMINGS } from "@/lib/finance/billing";
 import { aliases, amountCents, isoDate, requiredName, uuid } from "./form";
 
 export const ACCOUNT_KINDS = ["checking", "savings", "credit_card", "cash", "meal_voucher"] as const;
@@ -12,10 +13,10 @@ export const ACCOUNT_KIND_LABELS: Record<AccountKind, string> = {
   meal_voucher: "Vale-refeição",
 };
 
-const day = (label: string) =>
+const day = (label: string, message = `Informe o dia de ${label}.`) =>
   z.coerce
-    .number<string>({ error: `Informe o dia de ${label}.` })
-    .int({ error: `Informe o dia de ${label}.` })
+    .number<string>({ error: message })
+    .int({ error: message })
     .min(1, { error: "Use um dia entre 1 e 31." })
     .max(31, { error: "Use um dia entre 1 e 31." });
 
@@ -34,8 +35,9 @@ export const accountSchema = z.discriminatedUnion(
     z.object({
       ...base,
       kind: z.literal("credit_card"),
-      closingDay: day("fechamento"),
+      closingDay: day("melhor dia de compra", "Informe o melhor dia de compra."),
       dueDay: day("vencimento"),
+      invoiceNaming: z.enum(INVOICE_NAMINGS).catch("closing"),
       creditLimitCents: z
         .string()
         .optional()
@@ -69,6 +71,7 @@ export const ACCOUNT_FORM_FIELDS = [
   "aliases",
   "closingDay",
   "dueDay",
+  "invoiceNaming",
   "creditLimitCents",
   "openingBalanceCents",
   "openingBalanceDate",

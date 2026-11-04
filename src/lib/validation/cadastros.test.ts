@@ -25,8 +25,12 @@ describe("accountSchema", () => {
       aliases: ["nubank", "roxinho"],
       closingDay: 31,
       dueDay: 8,
+      invoiceNaming: "closing",
       creditLimitCents: 1200000,
     });
+    expect(
+      accountSchema.parse({ name: "X", kind: "credit_card", ownerUserId: "joint", closingDay: "26", dueDay: "3", invoiceNaming: "due" }),
+    ).toMatchObject({ invoiceNaming: "due" });
     expect(accountSchema.safeParse({ name: "X", kind: "credit_card", ownerUserId: "joint", dueDay: "8" }).success).toBe(
       false,
     );

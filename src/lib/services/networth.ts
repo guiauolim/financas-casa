@@ -4,8 +4,8 @@ import { yearMonthOf } from "@/lib/finance/dates";
 import type { LedgerEntry } from "@/lib/finance/ledger";
 import { type NetWorthInput, type NetWorthReport, netWorthForMonth } from "@/lib/finance/networth";
 import type { Snapshot } from "@/lib/finance/portfolio";
-import { type Account, listAccounts } from "./accounts";
-import { listSettledInvoices } from "./card-invoices";
+import { type Account, isCycleCard, listAccounts } from "./accounts";
+import { listSettledInvoices, toCardAccount } from "./card-invoices";
 import { type Investment, listInvestments, listSnapshots, toPortfolioInvestment } from "./investments";
 import { listLedger } from "./transactions";
 import type { Db } from "./types";
@@ -22,9 +22,7 @@ export function netWorthInput(
 ): NetWorthInput {
   return {
     moneyAccounts: accounts.filter((a) => a.kind !== "credit_card" && !a.archived),
-    cards: accounts
-      .filter((a) => a.kind === "credit_card" && a.closingDay && a.dueDay)
-      .map((a) => ({ id: a.id, closingDay: a.closingDay!, dueDay: a.dueDay!, settledReferences: settled.get(a.id) })),
+    cards: accounts.filter(isCycleCard).map((card) => toCardAccount(card, settled)),
     ledger,
     investments: investments.map(toPortfolioInvestment),
     snapshots,

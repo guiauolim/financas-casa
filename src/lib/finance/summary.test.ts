@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { expensesByCategory, expensesByPerson, monthlySeries, summarize } from "./summary";
+import { firstMonthOf } from "./ledger";
+import { expensesByCategory, expensesByPerson, monthlySeries, summarize, summarizeMonth } from "./summary";
 
 describe("summarize", () => {
   it("soma entradas e saídas e ignora transferências", () => {
@@ -53,6 +54,40 @@ describe("monthlySeries e expensesByCategory", () => {
       { categoryId: "mercado", spentCents: 8000 },
       { categoryId: "lazer", spentCents: 7000 },
     ]);
+  });
+});
+
+describe("todos os meses (Period { until })", () => {
+  const e = (type: "expense" | "income", occurredOn: string, amountCents: number, categoryId: string | null = null) => ({
+    type,
+    occurredOn,
+    amountCents,
+    categoryId,
+    accountId: "a",
+    transferAccountId: null,
+  });
+  const entries = [
+    e("income", "2026-09-05", 500000),
+    e("expense", "2026-09-10", 2000, "mercado"),
+    e("expense", "2026-11-03", 3000, "mercado"),
+    e("expense", "2026-11-04", 1000, "lazer"),
+    e("expense", "2026-12-04", 9999, "mercado"), // parcela futura: fica de fora
+  ];
+  const until = { year: 2026, month: 11 };
+
+  it("soma todos os meses até o atual, sem os futuros", () => {
+    expect(summarizeMonth(entries, { until })).toEqual({ incomeCents: 500000, expenseCents: 6000, balanceCents: 494000, count: 4 });
+    expect(expensesByCategory(entries, { until })).toEqual([
+      { categoryId: "mercado", spentCents: 5000 },
+      { categoryId: "lazer", spentCents: 1000 },
+    ]);
+    expect(expensesByPerson(entries, { until }, [])).toEqual([{ spentBy: null, spentCents: 6000 }]);
+  });
+
+  it("primeiro mês com lançamento (até o atual)", () => {
+    expect(firstMonthOf(entries, until)).toBe("2026-09");
+    expect(firstMonthOf(entries, { year: 2026, month: 8 })).toBeNull();
+    expect(firstMonthOf([], until)).toBeNull();
   });
 });
 
