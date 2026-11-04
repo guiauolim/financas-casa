@@ -9,6 +9,7 @@ import {
   monthTotals,
   planBatchDelete,
   selectionSummary,
+  splitOutside,
   sumInvoice,
 } from "./month-view";
 
@@ -107,6 +108,25 @@ describe("groupMonth", () => {
       balanceCents: 900000 - 23700,
     });
     expect(sumInvoice([{ type: "expense", amountCents: 100 }, { type: "income", amountCents: 30 }])).toBe(70);
+  });
+
+  it("splitOutside: despesas, receitas e transferências separadas, na ordem, somando como o resumo", () => {
+    const pix = tx({ occurredOn: "2026-11-05", amountCents: 8000 });
+    const salario = tx({ occurredOn: "2026-11-05", amountCents: 900000, type: "income", category: { id: "salario" } });
+    const pagamento = tx({ occurredOn: "2026-11-06", amountCents: 14500, type: "transfer", category: null, transferAccount: { id: A.id } });
+    const boleto = tx({ occurredOn: "2026-11-10", amountCents: 1200, category: { id: "contas" } });
+    const compra = tx({ occurredOn: "2026-11-02", amountCents: 3000, account: { id: A.id }, invoiceRef: "2026-11" });
+    const groups = groupMonth([pix, salario, pagamento, boleto, compra], [A], "2026-11");
+    const split = splitOutside(groups.outside);
+    expect(split.expenses).toEqual([pix, boleto]);
+    expect(split.incomes).toEqual([salario]);
+    expect(split.transfers).toEqual([pagamento]);
+    const totals = monthTotals(groups);
+    expect(split.expenses.reduce((s, e) => s + e.amountCents, 0)).toBe(totals.outsideCents);
+    expect(split.incomes.reduce((s, e) => s + e.amountCents, 0)).toBe(totals.incomeCents);
+    // Filtros valem antes da separação.
+    const filtered = splitOutside(groupMonth([pix, salario, boleto], [A], "2026-11", { categoryId: "contas" }).outside);
+    expect(filtered).toEqual({ expenses: [boleto], incomes: [], transfers: [] });
   });
 
   it("mês inválido", () => {

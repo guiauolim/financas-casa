@@ -155,7 +155,7 @@ pessoa (card_holders, mesmo cartão), classificação por comércio com regras a
 ## Fase 4.7 — Transações por mês, rapidez e exclusão definitiva ✅ concluída
 **Entregue** (branch `feat/transacoes-por-mes`):
 - Tela Transações: o mês manda em tudo. Uma seção por cartão (fatura do mês com Total/Pago/Falta,
-  recolhível) e "Fora do cartão"; resumo (total do mês, receitas, saldo); filtros
+  recolhível), "Despesas fora do cartão", "Receitas" e "Transferências"; resumo (total do mês, receitas, saldo); filtros
   Conta/Categoria/Pessoa aplicados na hora e mantidos na URL. Saíram o seletor "Fatura" e "Ver fatura".
 - Rapidez: só o mês e os totais das faturas (RPCs `card_invoice_totals`, `month_installment_totals`),
   meses em memória no navegador, prefetch do anterior/próximo, troca de mês sem skeleton e seletor

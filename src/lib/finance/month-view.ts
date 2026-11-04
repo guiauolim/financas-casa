@@ -5,7 +5,7 @@ import { monthRange, parseYearMonth } from "./dates";
 // - uma seção por cartão com ciclo: a fatura cujo NOME é o mês (pelo nome escolhido no cartão),
 //   com tudo o que foi gravado nela — inclusive parcelas de compras antigas;
 // - "Fora do cartão": o resto (pix, débito, dinheiro, transferências, pagamentos de fatura),
-//   pela data do lançamento.
+//   pela data do lançamento. Na tela, `splitOutside` separa em despesas, receitas e transferências.
 // Mesma regra do gasto do mês (spending-view.ts): no cartão, a fatura; fora dele, a data.
 
 export type MonthCard = CardCycle & { id: string; naming: InvoiceNaming };
@@ -75,6 +75,20 @@ export function groupMonth<T extends MonthEntry>(
     }
   }
   return { invoices: [...sections.values()], outside };
+}
+
+// "Fora do cartão" em três listas (na ordem recebida): despesas, receitas e transferências
+// (inclusive pagamento de fatura, que não entra nos totais).
+export function splitOutside<T extends Pick<MonthEntry, "type">>(outside: readonly T[]) {
+  const expenses: T[] = [];
+  const incomes: T[] = [];
+  const transfers: T[] = [];
+  for (const entry of outside) {
+    if (entry.type === "expense") expenses.push(entry);
+    else if (entry.type === "income") incomes.push(entry);
+    else transfers.push(entry);
+  }
+  return { expenses, incomes, transfers };
 }
 
 // Valor de um lançamento na fatura: compra e saque somam, estorno abate (como no banco).

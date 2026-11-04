@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, CreditCard, Plus, Receipt, Trash2, Wallet } from "lucide-react";
+import { ArrowDownRight, ArrowLeftRight, ArrowUpRight, ChevronDown, CreditCard, Plus, Receipt, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -31,6 +31,7 @@ import {
   type MonthFilters,
   monthTotals,
   selectionSummary,
+  splitOutside,
   sumInvoice,
 } from "@/lib/finance/month-view";
 import { HOUSE } from "@/lib/finance/spent-by";
@@ -168,6 +169,7 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
     [data, cards, monthFilters.accountId, monthFilters.categoryId, monthFilters.spentBy],
   );
   const totals = monthTotals(groups);
+  const outside = useMemo(() => splitOutside(groups.outside), [groups]);
   const visible = useMemo(() => [...groups.invoices.flatMap((s) => s.transactions), ...groups.outside], [groups]);
   const selectedVisible = visible.filter((tx) => selected.has(tx.id));
 
@@ -191,7 +193,7 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
       return next;
     });
 
-  // Seções recolhidas (por id: cartão ou "fora").
+  // Seções recolhidas (por id: cartão, "despesas", "receitas" ou "transferencias").
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const toggleCollapsed = (id: string) =>
     setCollapsed((current) => {
@@ -294,18 +296,48 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
               );
             })}
             <Section
-              id="fora"
-              icon={Wallet}
-              title="Fora do cartão"
-              subtitle="Pix, débito, dinheiro e transferências com data no mês. Pagamento de fatura aparece aqui e não entra nos totais."
-              transactions={groups.outside}
-              empty={hasFilters ? "Nada fora do cartão com esses filtros." : "Nada fora do cartão neste mês."}
-              collapsed={collapsed.has("fora")}
-              onToggleCollapsed={() => toggleCollapsed("fora")}
+              id="despesas"
+              icon={ArrowDownRight}
+              title="Despesas fora do cartão"
+              subtitle="Pix, débito, dinheiro e boletos com data no mês."
+              total={{ cents: totals.outsideCents, kind: "expense" }}
+              transactions={outside.expenses}
+              empty={hasFilters ? "Nenhuma despesa fora do cartão com esses filtros." : "Nenhuma despesa fora do cartão neste mês."}
+              collapsed={collapsed.has("despesas")}
+              onToggleCollapsed={() => toggleCollapsed("despesas")}
               selection={selection}
               onSelectAll={setMany}
               memberIndex={memberIndex}
             />
+            <Section
+              id="receitas"
+              icon={ArrowUpRight}
+              title="Receitas"
+              subtitle="Salário e outras entradas nas contas com data no mês."
+              total={{ cents: totals.incomeCents, kind: "income" }}
+              transactions={outside.incomes}
+              empty={hasFilters ? "Nenhuma receita com esses filtros." : "Nenhuma receita neste mês."}
+              collapsed={collapsed.has("receitas")}
+              onToggleCollapsed={() => toggleCollapsed("receitas")}
+              selection={selection}
+              onSelectAll={setMany}
+              memberIndex={memberIndex}
+            />
+            {outside.transfers.length ? (
+              <Section
+                id="transferencias"
+                icon={ArrowLeftRight}
+                title="Transferências"
+                subtitle="Entre contas e pagamentos de fatura. Não entram nos totais (o gasto do cartão já está na fatura)."
+                transactions={outside.transfers}
+                empty=""
+                collapsed={collapsed.has("transferencias")}
+                onToggleCollapsed={() => toggleCollapsed("transferencias")}
+                selection={selection}
+                onSelectAll={setMany}
+                memberIndex={memberIndex}
+              />
+            ) : null}
           </>
         )}
       </div>
@@ -520,8 +552,16 @@ function Section({
   title,
   subtitle,
   empty,
+  total,
   ...props
-}: SectionProps & { id: string; icon: typeof Wallet; title: string; subtitle: string; empty: string }) {
+}: SectionProps & {
+  id: string;
+  icon: typeof CreditCard;
+  title: string;
+  subtitle: string;
+  empty: string;
+  total?: { cents: number; kind: "expense" | "income" };
+}) {
   const bodyId = `secao-${id}`;
   return (
     <section id={id} className="flex flex-col gap-4 rounded-[14px] border border-border bg-card p-5 md:p-6">
@@ -540,6 +580,12 @@ function Section({
             </span>
           </p>
         </div>
+        {total ? (
+          <p className="ml-auto pt-1 text-[17px] font-semibold">
+            <span className="sr-only">Total: </span>
+            <Money cents={total.cents} kind={total.kind} />
+          </p>
+        ) : null}
       </header>
       <SectionBody id={bodyId} empty={empty} label={title} {...props} />
     </section>

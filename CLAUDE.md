@@ -94,8 +94,9 @@ docs/ROADMAP.md
 
 ## Tela Transações (o mês manda em tudo)
 - Mês escolhido → uma seção por cartão com ciclo ("Fatura <cartão> · <mês> (dd/mm a dd/mm) · vence dd/mm",
-  Total/Pago/Falta da fatura inteira, lançamentos dela inclusive parcelas antigas) + "Fora do cartão"
-  (pela data). Regra pura em `lib/finance/month-view.ts` (`groupMonth`, `monthTotals`); dados em
+  Total/Pago/Falta da fatura inteira, lançamentos dela inclusive parcelas antigas) + fora do cartão
+  (pela data) em "Despesas fora do cartão", "Receitas" e "Transferências" (pagamento de fatura; fora dos
+  totais). Regra pura em `lib/finance/month-view.ts` (`groupMonth`, `splitOutside`, `monthTotals`); dados em
   `services/month-transactions.ts` (`getTransactionsMonth`, também para o bot).
 - Rapidez: nada de ledger inteiro. `listMonthTransactions` (data no mês OU fatura candidata) +
   RPCs `card_invoice_totals` (somas por cartão/fatura → `ledgerFromInvoiceTotals` → `cardInvoices`) e
