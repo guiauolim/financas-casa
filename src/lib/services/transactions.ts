@@ -188,15 +188,16 @@ async function withPurchaseTotals(db: Db, householdId: string, transactions: Tra
 // Últimos lançamentos do mês (mais recentes primeiro), para a Visão geral.
 export async function listRecentTransactions(
   db: Db,
-  { householdId, month, limit = 8 }: { householdId: string; month: YearMonth; limit?: number },
+  { householdId, month, until, limit = 8 }: { householdId: string; month?: YearMonth; until?: string; limit?: number },
 ): Promise<Transaction[]> {
-  const { from, to } = monthRange(month);
-  const { data, error } = await db
-    .from("transactions")
-    .select(SELECT)
-    .eq("household_id", householdId)
-    .gte("occurred_on", from)
-    .lte("occurred_on", to)
+  // Do mês, ou de todos os meses até `until` ("YYYY-MM-DD"; sem parcelas futuras).
+  let query = db.from("transactions").select(SELECT).eq("household_id", householdId);
+  if (month) {
+    const { from, to } = monthRange(month);
+    query = query.gte("occurred_on", from).lte("occurred_on", to);
+  }
+  if (until) query = query.lte("occurred_on", until);
+  const { data, error } = await query
     .order("occurred_on", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit)

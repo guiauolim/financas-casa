@@ -18,25 +18,31 @@ import { CategoryIcon } from "@/components/category-icon";
 import { EmptyState } from "@/components/empty-state";
 import { Money } from "@/components/money";
 import { SpenderAvatar } from "@/components/member-avatar";
-import { MonthNav } from "@/components/month-nav";
 import { Panel } from "@/components/panel";
 import { buttonVariants } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SPENDING_RULE_NOTE } from "@/components/spending-rule-note";
 import { projectedCents } from "@/lib/finance/budget";
 import { formatBRL } from "@/lib/finance/money";
-import { daysBetween, formatDayMonth, formatMonthLong, toYearMonth } from "@/lib/finance/dates";
+import { daysBetween, formatDayMonth, formatMonthLong, formatMonthShort, parseYearMonth, toYearMonth } from "@/lib/finance/dates";
 import type { InsightTone } from "@/lib/finance/insights";
 import { HOUSE, spentByToParam } from "@/lib/finance/spent-by";
 import { capitalize, cn } from "@/lib/utils";
 import { type InvoiceNaming, invoiceNameMonth } from "@/lib/finance/billing";
 import { TransactionRows } from "../transacoes/transaction-rows";
 import { IncomeExpenseChart } from "./income-expense-chart";
+import { PeriodPicker } from "./period-picker";
 import { loadOverview, loadRecent, mesParam } from "./data";
 
 type Props = { searchParams: PageProps<"/dashboard">["searchParams"] };
 
 const mesOf = async ({ searchParams }: Props) => mesParam((await searchParams).mes);
+
+// "desde nov de 2025" (primeiro mês com lançamento), para as legendas de "Todos os meses".
+const since = (firstMonth: string | null) => {
+  const ym = firstMonth ? parseYearMonth(firstMonth) : null;
+  return ym ? `desde ${formatMonthShort(ym)}` : "";
+};
 
 const textLink =
   "inline-flex min-h-11 items-center gap-1 rounded text-sm font-medium text-primary underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none";
@@ -45,10 +51,10 @@ const textLink =
 
 export async function MonthSelector(props: Props) {
   const mes = await mesOf(props);
-  const { month } = await loadOverview(mes);
+  const { month, period, today } = await loadOverview(mes);
   return (
     <Panel>
-      <MonthNav month={month} href={(m) => `/dashboard?mes=${m}`} />
+      <PeriodPicker month={period === "all" ? null : toYearMonth(month)} today={today} />
       <p className="text-[13px] text-muted-foreground">{SPENDING_RULE_NOTE}</p>
     </Panel>
   );
@@ -74,7 +80,8 @@ const kpiValue = "text-2xl font-semibold tracking-tight";
 export async function Kpis(props: Props) {
   const mes = await mesOf(props);
   const overview = await loadOverview(mes);
-  const { summary, budgets, netWorth, isCurrentMonth, month } = overview;
+  const { summary, budgets, netWorth, isCurrentMonth, month, period, firstMonth, monthsCount } = overview;
+  const all = period === "all";
   const total = budgets.total;
   const card = budgets.cards[0] ?? null; // o de maior uso
 
@@ -96,7 +103,7 @@ export async function Kpis(props: Props) {
 
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-4">
-      <Kpi label="Saldo do mês">
+      <Kpi label={all ? "Saldo acumulado" : "Saldo do mês"}>
         <Money cents={summary.balanceCents} className={kpiValue} />
         <p className="flex flex-wrap gap-x-3 text-[13px] text-muted-foreground">
           <span>
@@ -105,33 +112,45 @@ export async function Kpis(props: Props) {
           <span>
             Saídas <Money cents={summary.expenseCents} kind="expense" />
           </span>
+          {all && firstMonth ? <span>Todos os meses, {since(firstMonth)}.</span> : null}
         </p>
       </Kpi>
 
-      <Kpi label="Gasto x orçamento do mês">
-        <p className="flex flex-wrap items-baseline gap-x-2">
-          <Money cents={total?.spentCents ?? summary.expenseCents} className={kpiValue} />
+      {all ? (
+        <Kpi label="Gasto total">
+          <Money cents={summary.expenseCents} className={kpiValue} />
+          <p className="text-[13px] text-muted-foreground">
+            Média de <Money cents={Math.round(summary.expenseCents / Math.max(1, monthsCount))} /> por mês em{" "}
+            <span className="font-mono">{monthsCount}</span> {monthsCount === 1 ? "mês" : "meses"}. Orçamento é por mês:
+            escolha um mês para ver.
+          </p>
+        </Kpi>
+      ) : (
+        <Kpi label="Gasto x orçamento do mês">
+          <p className="flex flex-wrap items-baseline gap-x-2">
+            <Money cents={total?.spentCents ?? summary.expenseCents} className={kpiValue} />
+            {total ? (
+              <span className="text-sm text-muted-foreground">
+                de <Money cents={total.limitCents} />
+              </span>
+            ) : null}
+          </p>
           {total ? (
-            <span className="text-sm text-muted-foreground">
-              de <Money cents={total.limitCents} />
-            </span>
-          ) : null}
-        </p>
-        {total ? (
-          <>
-            <BudgetBar
-              progress={total}
-              projectionCents={projectedCents(budgets.projection)}
-              label="Gasto do mês contra o orçamento"
-            />
-            {isCurrentMonth ? <ProjectionNote projection={budgets.projection} limitCents={total.limitCents} /> : null}
-          </>
-        ) : (
-          <Link href="/orcamentos/novo?tipo=total" className={textLink}>
-            Definir orçamento mensal <ArrowRight className="size-4" aria-hidden />
-          </Link>
-        )}
-      </Kpi>
+            <>
+              <BudgetBar
+                progress={total}
+                projectionCents={projectedCents(budgets.projection)}
+                label="Gasto do mês contra o orçamento"
+              />
+              {isCurrentMonth ? <ProjectionNote projection={budgets.projection} limitCents={total.limitCents} /> : null}
+            </>
+          ) : (
+            <Link href="/orcamentos/novo?tipo=total" className={textLink}>
+              Definir orçamento mensal <ArrowRight className="size-4" aria-hidden />
+            </Link>
+          )}
+        </Kpi>
+      )}
 
       <Kpi label={card ? `Limite semanal · ${card.account?.name ?? "cartão"}` : "Limite semanal do cartão"}>
         {card ? (
@@ -172,7 +191,7 @@ export async function Kpis(props: Props) {
             {formatBRL(Math.abs(netWorth.changeCents))}
           </span>
           <span className="text-card/75">
-            {isCurrentMonth ? "no mês" : `em ${formatMonthLong(month)}`}
+            {all ? "no mês atual" : isCurrentMonth ? "no mês" : `em ${formatMonthLong(month)}`}
           </span>
         </p>
         <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-t border-card/15 pt-2 text-[13px]">
@@ -217,12 +236,13 @@ const MAX_CATEGORIES = 8;
 
 export async function CategorySpending(props: Props) {
   const mes = await mesOf(props);
-  const { categories } = await loadOverview(mes);
+  const { categories, period, firstMonth } = await loadOverview(mes);
+  const all = period === "all";
   const shown = categories.slice(0, MAX_CATEGORIES);
   return (
     <Panel
       title="Gastos por categoria"
-      description="Despesas do mês; no cartão, pela fatura."
+      description={all ? `Despesas de todos os meses, ${since(firstMonth)}; no cartão, pela fatura.` : "Despesas do mês; no cartão, pela fatura."}
       actions={
         <Link href="/orcamentos" className={textLink}>
           Orçamentos <ArrowRight className="size-4" aria-hidden />
@@ -231,7 +251,7 @@ export async function CategorySpending(props: Props) {
       className="h-full"
     >
       {shown.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nenhuma despesa neste mês.</p>
+        <p className="text-sm text-muted-foreground">{all ? "Nenhuma despesa ainda." : "Nenhuma despesa neste mês."}</p>
       ) : (
         <ul className="flex flex-col divide-y divide-divider">
           {shown.map((c) => (
@@ -282,9 +302,15 @@ const TONES: Record<InsightTone, { icon: LucideIcon; className: string; label: s
 
 export async function Insights(props: Props) {
   const mes = await mesOf(props);
-  const { insights } = await loadOverview(mes);
+  const { insights, period } = await loadOverview(mes);
   return (
-    <Panel title="Insights" description="Calculados a partir dos lançamentos e orçamentos." className="flex-1">
+    <Panel
+      title="Insights"
+      description={
+        period === "all" ? "Do mês atual, a partir dos lançamentos e orçamentos." : "Calculados a partir dos lançamentos e orçamentos."
+      }
+      className="flex-1"
+    >
       {insights.length === 0 ? (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <Lightbulb className="size-4 shrink-0" strokeWidth={2} aria-hidden />
@@ -318,9 +344,9 @@ export async function IncomeExpense(props: Props) {
   const { series } = await loadOverview(mes);
   const empty = series.every((m) => m.incomeCents === 0 && m.expenseCents === 0);
   return (
-    <Panel title="Entradas x saídas" description="Últimos 6 meses. Transferências não entram." className="h-full">
+    <Panel title="Entradas x saídas" description={`Últimos ${series.length} meses. Transferências não entram.`} className="h-full">
       {empty ? (
-        <p className="text-sm text-muted-foreground">Sem lançamentos nos últimos 6 meses.</p>
+        <p className="text-sm text-muted-foreground">Sem lançamentos nos últimos {series.length} meses.</p>
       ) : (
         <IncomeExpenseChart series={series} />
       )}
@@ -418,13 +444,18 @@ export async function OpenInvoices(props: Props) {
 
 export async function ByPerson(props: Props) {
   const mes = await mesOf(props);
-  const { byPerson, month } = await loadOverview(mes);
+  const { byPerson, month, period, firstMonth } = await loadOverview(mes);
+  const all = period === "all";
   const total = byPerson.reduce((sum, p) => sum + p.spentCents, 0);
-  const monthKey = toYearMonth(month);
+  // Transações é sempre por mês: em "Todos os meses", o link abre o mês atual.
+  const monthQuery = all ? "" : `mes=${toYearMonth(month)}&`;
   return (
-    <Panel title="Por pessoa" description="Saídas do mês: da casa e de cada um.">
+    <Panel
+      title="Por pessoa"
+      description={all ? `Saídas de todos os meses, ${since(firstMonth)}: da casa e de cada um.` : "Saídas do mês: da casa e de cada um."}
+    >
       {total === 0 ? (
-        <p className="text-sm text-muted-foreground">Nenhuma saída neste mês.</p>
+        <p className="text-sm text-muted-foreground">{all ? "Nenhuma saída ainda." : "Nenhuma saída neste mês."}</p>
       ) : (
         <ul className="flex flex-col gap-1">
           {byPerson.map((person) => {
@@ -432,7 +463,7 @@ export async function ByPerson(props: Props) {
             return (
               <li key={person.spentBy ?? HOUSE}>
                 <Link
-                  href={`/transacoes?mes=${monthKey}&pessoa=${spentByToParam(person.spentBy)}`}
+                  href={`/transacoes?${monthQuery}pessoa=${spentByToParam(person.spentBy)}`}
                   className="-mx-2 flex min-h-11 flex-col gap-2 rounded-lg px-2 py-2 hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
                 >
                   <span className="flex items-center gap-3">
@@ -458,12 +489,12 @@ export async function ByPerson(props: Props) {
 
 export async function RecentTransactions(props: Props) {
   const mes = await mesOf(props);
-  const { month, transactions, memberIds } = await loadRecent(mes);
-  const allHref = `/transacoes?mes=${toYearMonth(month)}`;
+  const { month, allMonths, transactions, memberIds } = await loadRecent(mes);
+  const allHref = allMonths ? "/transacoes" : `/transacoes?mes=${toYearMonth(month)}`;
   return (
     <Panel
       title="Últimos lançamentos"
-      description={`Os mais recentes de ${formatMonthLong(month)}.`}
+      description={allMonths ? "Os mais recentes, até hoje." : `Os mais recentes de ${formatMonthLong(month)}.`}
       actions={
         <Link href={allHref} className={textLink}>
           Ver todos <ArrowRight className="size-4" aria-hidden />
@@ -471,7 +502,7 @@ export async function RecentTransactions(props: Props) {
       }
     >
       {transactions.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nenhum lançamento neste mês.</p>
+        <p className="text-sm text-muted-foreground">{allMonths ? "Nenhum lançamento ainda." : "Nenhum lançamento neste mês."}</p>
       ) : (
         <TransactionRows transactions={transactions} memberIndex={(id) => memberIds.indexOf(id ?? "")} />
       )}

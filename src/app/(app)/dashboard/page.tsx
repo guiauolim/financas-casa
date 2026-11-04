@@ -29,7 +29,7 @@ export default function DashboardPage({ searchParams }: PageProps<"/dashboard">)
     <>
       <PageHeader
         title="Visão geral"
-        description="Resumo do mês da casa."
+        description="Resumo da casa: todos os meses ou um mês escolhido."
         actions={
           <Link href="/transacoes/nova" className={buttonVariants()}>
             <Plus aria-hidden />

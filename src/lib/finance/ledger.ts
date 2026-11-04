@@ -33,3 +33,30 @@ export function entriesInMonth<T extends LedgerEntry>(
   const key = toYearMonth(month);
   return entries.filter((entry) => monthOf(entry) === key);
 }
+
+// Período dos relatórios da Visão geral: um mês, ou "Todos os meses" = todos até `until`
+// (inclusive; parcelas de meses futuros ficam de fora).
+export type Period = YearMonth | { until: YearMonth };
+
+export const isAllMonths = (period: Period): period is { until: YearMonth } => "until" in period;
+
+export function entriesInPeriod<T extends LedgerEntry>(
+  entries: readonly T[],
+  period: Period,
+  monthOf: MonthOf = purchaseMonthOf,
+): T[] {
+  if (!isAllMonths(period)) return entriesInMonth(entries, period, monthOf);
+  const until = toYearMonth(period.until);
+  return entries.filter((entry) => monthOf(entry) <= until);
+}
+
+// Primeiro mês ("YYYY-MM") com lançamento até `until`, ou null se não houver.
+export function firstMonthOf(entries: readonly LedgerEntry[], until: YearMonth, monthOf: MonthOf = purchaseMonthOf): string | null {
+  const last = toYearMonth(until);
+  let first: string | null = null;
+  for (const entry of entries) {
+    const month = monthOf(entry);
+    if (month <= last && (first === null || month < first)) first = month;
+  }
+  return first;
+}

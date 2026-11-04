@@ -31,7 +31,7 @@ src/
     auth/confirm/route.ts    # destino dos links de e-mail (token_hash → verifyOtp)
     auth/signout/route.ts
     onboarding/              # 1º login: cria a casa ou aceita convite; /onboarding/convite
-    (app)/dashboard/         # visão geral do mês
+    (app)/dashboard/         # visão geral: "Todos os meses" (padrão, sem ?mes; até o mês atual) ou um mês
     (app)/transacoes/        # mês (faturas + fora do cartão; month-browser no cliente), dados/ (GET do mês),
                              # nova, [id], importar (faturas do cartão com prévia)
     (app)/orcamentos/
