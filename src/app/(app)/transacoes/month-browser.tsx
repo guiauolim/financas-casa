@@ -247,18 +247,12 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
       <div className={cn("flex flex-col gap-4 transition-opacity", pending && "opacity-60")} aria-busy={pending}>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-4">
           <Kpi label="Total do mês" value={<Money cents={totals.totalCents} />} hint="Saídas: cartão + fora do cartão." />
-          <Kpi label="No cartão" value={<Money cents={totals.cardCents} />} hint="Faturas do mês, já com estornos." />
-          <Kpi label="Fora do cartão" value={<Money cents={totals.outsideCents} />} hint="Pix, débito, dinheiro e boletos." />
           <Kpi
-            label="Saldo do mês"
-            value={<Money cents={totals.balanceCents} />}
-            hint={
-              <>
-                Entradas <Money cents={totals.incomeCents} kind="income" /> · saídas{" "}
-                <Money cents={totals.totalCents} kind="expense" />
-              </>
-            }
+            label="Receitas do mês"
+            value={<Money cents={totals.incomeCents} kind="income" />}
+            hint="Salário e outras entradas nas contas."
           />
+          <Kpi label="Saldo do mês" value={<Money cents={totals.balanceCents} />} hint="Receitas − total do mês." />
         </div>
 
         {empty ? (
