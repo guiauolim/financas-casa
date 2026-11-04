@@ -14,13 +14,16 @@ export class ServiceError extends Error {
 
 export const isUniqueViolation = (error: PostgrestError | null) => error?.code === "23505";
 
-// Lança um Error de verdade (stack e mensagem legíveis no overlay/log), mantendo `code`,
+// Error de verdade (stack e mensagem legíveis no overlay/log), mantendo `code`,
 // `details` e `hint` do PostgREST para quem trata pelo código (ex.: serviceErrorState).
-export function throwIf(error: PostgrestError | null): void {
-  if (!error) return;
-  throw Object.assign(new Error(`Supabase ${error.code}: ${error.message}`), {
+export function supabaseError(error: PostgrestError): Error {
+  return Object.assign(new Error(`Supabase${error.code ? ` ${error.code}` : ""}: ${error.message}`), {
     code: error.code,
     details: error.details,
     hint: error.hint,
   });
+}
+
+export function throwIf(error: PostgrestError | null): void {
+  if (error) throw supabaseError(error);
 }
