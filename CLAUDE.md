@@ -62,9 +62,9 @@ src/
   proxy.ts                   # Next 16: substitui o middleware.ts
 supabase/
   migrations/                # 0001_init … 0005_investimentos, 0006_import_fatura_pessoas, 0007_faturas_pagas,
-                             # 0008_fatura_referencia, 0009_exclusao_definitiva
-  pending/                   # migrations preparadas que NÃO podem ir no próximo `db push` (ex.: 0010_remove_deleted_at,
-                             # só depois do deploy: mover para migrations/ e dar push)
+                             # 0008_fatura_referencia, 0009_exclusao_definitiva, 0010_remove_deleted_at
+  pending/                   # (criar quando preciso) migrations que NÃO podem ir no próximo `db push`;
+                             # só depois do deploy: mover para migrations/ e dar push
   seed.sql                   # só dev local (`supabase db reset`); nunca vai para o remoto
   templates/                 # e-mails do Auth (magic link, convite) em PT-BR
 scripts/make-{b3,itau}-fixture.mjs  # geram as fixtures fictícias dos importadores
@@ -103,7 +103,7 @@ docs/ROADMAP.md
   `month_installment_totals`, tudo em paralelo. No cliente (`month-browser.tsx`): meses em memória,
   prefetch do anterior/próximo via GET `/transacoes/dados?mes=`, URL por `history.pushState/replaceState`
   (sem render no servidor), filtros Conta/Categoria/Pessoa aplicados no navegador.
-- Exclusão é **definitiva** (sem lixeira; o código não usa mais `deleted_at`, que a 0010 remove depois do deploy): em lote (`deleteTransactions`,
+- Exclusão é **definitiva** (sem lixeira; a coluna `deleted_at` saiu na 0010): em lote (`deleteTransactions`,
   "só estas / e as próximas parcelas" via `planBatchDelete`) e "Excluir fatura" (`deleteInvoiceTransactions`:
   só os lançamentos do cartão naquela fatura). Confirmação sempre diz "Não dá para desfazer".
   O `undo_last` do bot apaga de vez o último lançamento (`deleteTransaction`).

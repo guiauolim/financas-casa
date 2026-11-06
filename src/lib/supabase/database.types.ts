@@ -585,7 +585,6 @@ export type Database = {
           display_name: string
           household_id: string
           phone_e164: string | null
-          spending_view: string
           user_id: string
         }
         Insert: {
@@ -593,7 +592,6 @@ export type Database = {
           display_name: string
           household_id: string
           phone_e164?: string | null
-          spending_view?: string
           user_id: string
         }
         Update: {
@@ -601,7 +599,6 @@ export type Database = {
           display_name?: string
           household_id?: string
           phone_e164?: string | null
-          spending_view?: string
           user_id?: string
         }
         Relationships: [
@@ -622,7 +619,6 @@ export type Database = {
           category_id: string | null
           created_at: string
           created_by: string | null
-          deleted_at: string | null
           description: string | null
           household_id: string
           id: string
@@ -645,7 +641,6 @@ export type Database = {
           category_id?: string | null
           created_at?: string
           created_by?: string | null
-          deleted_at?: string | null
           description?: string | null
           household_id: string
           id?: string
@@ -668,7 +663,6 @@ export type Database = {
           category_id?: string | null
           created_at?: string
           created_by?: string | null
-          deleted_at?: string | null
           description?: string | null
           household_id?: string
           id?: string

@@ -164,8 +164,8 @@ pessoa (card_holders, mesmo cartão), classificação por comércio com regras a
   "Excluir fatura"
 - Migration `0009_exclusao_definitiva.sql` (compatível com o código anterior, já aplicada): RPCs novas,
   índices sem `deleted_at` e apaga o que estava na lixeira. Tela Lixeira/restaurar removidas.
-- [ ] Depois do merge e do deploy: `supabase/pending/0010_remove_deleted_at.sql` (remove `deleted_at`,
-  índices antigos e `profiles.spending_view`) → mover para `migrations/`, `db push`, `db:types`
+- [x] Depois do merge e do deploy: `0010_remove_deleted_at.sql` (remove `deleted_at`, índices antigos e
+  `profiles.spending_view`), aplicada
 
 ---
 
