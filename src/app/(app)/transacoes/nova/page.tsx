@@ -36,7 +36,7 @@ export default function NovaTransacaoPage() {
 
 async function NewTransaction() {
   const actor = await requireActor();
-  const { accounts, categories, members } = await loadFormOptions(await createClient(), actor.householdId);
+  const { accounts, categories, members, defaultIncomeAccountId } = await loadFormOptions(await createClient(), actor.householdId);
   if (accounts.length === 0) {
     return (
       <EmptyState
@@ -58,6 +58,7 @@ async function NewTransaction() {
         categories={categories}
         members={members}
         currentUserId={actor.userId}
+        defaultIncomeAccountId={defaultIncomeAccountId}
         today={todayInSaoPaulo()}
       />
     </Panel>

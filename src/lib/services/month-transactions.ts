@@ -1,6 +1,7 @@
 import "server-only";
 import { parseYearMonth, toYearMonth, type YearMonth } from "@/lib/finance/dates";
 import { type MonthCard, monthInvoiceRef } from "@/lib/finance/month-view";
+import { cardPaymentAccount, invoicePaidOn } from "@/lib/finance/payment-account";
 import { isCycleCard, listAccounts } from "./accounts";
 import { cardInvoicesNamed, findNamedInvoice, listInvoiceTotals, listSettledInvoices, type NamedInvoice } from "./card-invoices";
 import { listMonthTransactions, type Transaction } from "./transactions";
@@ -13,6 +14,8 @@ import type { Db } from "./types";
 export type MonthInvoice = {
   card: MonthCard & { name: string; archived: boolean };
   invoice: NamedInvoice; // fatura com o nome do mês: período, vencimento, total, pago, falta
+  paidOn: string | null; // data do último pagamento lançado para esta fatura
+  paymentAccount: { id: string; name: string } | null; // de onde sai o "Pagar fatura"
 };
 
 export type TransactionsMonth = {
@@ -49,7 +52,25 @@ export async function getTransactionsMonth(
     if (account.archived && !transactions.some((tx) => tx.account.id === account.id && tx.invoiceRef === ref)) return [];
     const ledger = totals.filter((e) => e.accountId === account.id || e.transferAccountId === account.id);
     const { named, open } = cardInvoicesNamed(account, ledger, today, settled);
-    return [{ card, invoice: findNamedInvoice(account, named, open.ref, ref) }];
+    const payer = cardPaymentAccount(account, accounts);
+    return [
+      {
+        card,
+        invoice: findNamedInvoice(account, named, open.ref, ref),
+        // Os pagamentos com fatura gravada vêm na lista do mês (invoice_ref candidato).
+        paidOn: invoicePaidOn(
+          account.id,
+          ref,
+          transactions.map((tx) => ({
+            type: tx.type,
+            occurredOn: tx.occurredOn,
+            transferAccountId: tx.transferAccount?.id ?? null,
+            invoiceRef: tx.invoiceRef,
+          })),
+        ),
+        paymentAccount: payer ? { id: payer.id, name: payer.name } : null,
+      },
+    ];
   });
 
   return { month: monthKey, today, invoices, transactions };

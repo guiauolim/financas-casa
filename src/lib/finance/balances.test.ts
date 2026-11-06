@@ -190,6 +190,18 @@ describe("cardInvoices com a fatura gravada no lançamento (invoice_ref)", () =>
     expect(result.invoices.find((i) => i.ref === "2026-10")).toMatchObject({ paidCents: 30000, remainingCents: 0 });
   });
 
+  it("Pagar fatura em partes: cada pagamento com a fatura gravada abate só ela", () => {
+    const entries = [
+      entry("expense", "2026-10-10", 30000, CARD, null, "2026-10"),
+      entry("expense", "2026-11-10", 8000, CARD, null, "2026-11"),
+      entry("transfer", "2026-11-01", 10000, BANK, CARD, "2026-10"), // parcial
+      entry("transfer", "2026-11-03", 20000, BANK, CARD, "2026-10"), // o resto
+    ];
+    const result = cardInvoices(card, entries, "2026-11-12");
+    expect(result.invoices.find((i) => i.ref === "2026-10")).toMatchObject({ paidCents: 30000, remainingCents: 0 });
+    expect(result.open).toMatchObject({ ref: "2026-11", paidCents: 0, remainingCents: 8000 });
+  });
+
   it("sobra do pagamento com fatura vai para as outras (FIFO)", () => {
     const entries = [
       entry("expense", "2026-09-10", 20000, CARD, null, "2026-09"),

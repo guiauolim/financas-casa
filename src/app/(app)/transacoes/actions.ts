@@ -6,6 +6,8 @@ import { z } from "zod";
 import type { ActionResult } from "@/components/action-button";
 import { invalidState, serviceErrorState } from "@/lib/actions";
 import { requireActor } from "@/lib/auth/session";
+import { todayInSaoPaulo } from "@/lib/finance/dates";
+import { payCardInvoice } from "@/lib/services/card-invoices";
 import {
   createTransaction,
   deleteInvoiceTransactions,
@@ -14,7 +16,7 @@ import {
   updateTransaction,
 } from "@/lib/services/transactions";
 import { createClient } from "@/lib/supabase/server";
-import { type FormState, formValues } from "@/lib/validation/form";
+import { type FormState, formValues, isoDate } from "@/lib/validation/form";
 import { scopeSchema, TRANSACTION_FORM_FIELDS, transactionSchema } from "@/lib/validation/transactions";
 
 const targetSchema = z.object({ id: z.uuid(), scope: scopeSchema });
@@ -86,5 +88,34 @@ export async function deleteInvoiceAction(input: { accountId: string; ref: strin
     return { deleted };
   } catch (error) {
     return failure(error, "Não foi possível excluir a fatura.");
+  }
+}
+
+export type PayResult = { error: string } | { remainingCents: number };
+
+const paySchema = z.object({
+  cardId: z.uuid(),
+  ref: monthSchema,
+  occurredOn: isoDate,
+  amountCents: z.number().int().min(1),
+});
+
+// "Pagar fatura": transferência da conta que paga para o cartão (valor e data escolhidos).
+export async function payInvoiceAction(input: {
+  cardId: string;
+  ref: string;
+  occurredOn: string;
+  amountCents: number;
+}): Promise<PayResult> {
+  const actor = await requireActor();
+  const parsed = paySchema.safeParse(input);
+  if (!parsed.success) return { error: "Confira o valor e a data." };
+  try {
+    const { remainingCents } = await payCardInvoice(await createClient(), actor, parsed.data, todayInSaoPaulo());
+    refresh();
+    return { remainingCents };
+  } catch (error) {
+    const fallback = "Não foi possível pagar a fatura.";
+    return { error: serviceErrorState(error, fallback).error ?? fallback };
   }
 }

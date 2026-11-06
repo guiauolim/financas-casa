@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownRight, ArrowLeftRight, ArrowUpRight, ChevronDown, CreditCard, Plus, Receipt, Trash2 } from "lucide-react";
+import { ArrowDownRight, ArrowLeftRight, ArrowUpRight, Banknote, ChevronDown, CreditCard, Plus, Receipt, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
@@ -23,7 +23,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { addMonthsToRef } from "@/lib/finance/billing";
 import { formatDayMonth } from "@/lib/finance/dates";
-import { formatBRL } from "@/lib/finance/money";
+import { formatAmountInput, formatBRL, parseBRL } from "@/lib/finance/money";
 import {
   type DeleteScope,
   groupMonth,
@@ -40,7 +40,7 @@ import type { Transaction } from "@/lib/services/transactions";
 import { cn } from "@/lib/utils";
 import { TX_TYPE_LABELS } from "@/lib/validation/categories";
 import { transactionFiltersSchema } from "@/lib/validation/transactions";
-import { deleteInvoiceAction, deleteTransactionsAction, type DeleteResult } from "./actions";
+import { deleteInvoiceAction, deleteTransactionsAction, type DeleteResult, payInvoiceAction } from "./actions";
 import { checkboxClassName, type RowSelection, TransactionRows } from "./transaction-rows";
 
 type Options = {
@@ -76,7 +76,8 @@ const monthName = (month: string) => monthNameFormat.format(new Date(`${month}-1
 
 type Dialog =
   | { kind: "batch"; ids: string[]; following: boolean; summary: ReturnType<typeof selectionSummary> }
-  | { kind: "invoice"; item: MonthInvoice; count: number; totalCents: number };
+  | { kind: "invoice"; item: MonthInvoice; count: number; totalCents: number }
+  | { kind: "pay"; item: MonthInvoice };
 
 // Tela Transações: o mês manda em tudo. Guarda os meses já vistos em memória, busca antes o
 // anterior e o próximo e mantém a tela atual enquanto um mês novo chega (sem skeleton).
@@ -228,6 +229,18 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
       toast.success(result.deleted === 1 ? "1 lançamento excluído." : `${result.deleted} lançamentos excluídos.`);
     });
 
+  // "Pagar fatura": transferência da conta que paga para o cartão (valor e data do diálogo).
+  const runPay = (item: MonthInvoice, amountCents: number, occurredOn: string) =>
+    startDeleting(async () => {
+      const result = await payInvoiceAction({ cardId: item.card.id, ref: item.invoice.ref, occurredOn, amountCents });
+      if ("error" in result) {
+        toast.error(result.error);
+        return;
+      }
+      startDeleting(() => setDialog(null));
+      toast.success(result.remainingCents > 0 ? `Pagamento lançado. Ainda faltam ${formatBRL(result.remainingCents)}.` : "Fatura paga.");
+    });
+
   // Lixeira da seção: os lançamentos visíveis dela (com os filtros), na confirmação de lote.
   const confirmBatch = (txs: readonly Transaction[]) =>
     setDialog({
@@ -296,6 +309,7 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
                   selection={selection}
                   onSelectAll={setMany}
                   memberIndex={memberIndex}
+                  onPay={() => setDialog({ kind: "pay", item })}
                   onDeleteInvoice={
                     all.length
                       ? () => setDialog({ kind: "invoice", item, count: all.length, totalCents: sumInvoice(all) })
@@ -398,6 +412,15 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
               onConfirm={() =>
                 runDelete(() => deleteInvoiceAction({ accountId: dialog.item.card.id, ref: dialog.item.invoice.ref }))
               }
+            />
+          ) : dialog?.kind === "pay" ? (
+            <PayConfirm
+              key={`${dialog.item.card.id}-${dialog.item.invoice.ref}`}
+              item={dialog.item}
+              month={data.month}
+              today={data.today}
+              pending={deleting}
+              onConfirm={(amountCents, occurredOn) => runPay(dialog.item, amountCents, occurredOn)}
             />
           ) : null}
         </AlertDialogContent>
@@ -604,14 +627,17 @@ function HeaderEnd({
   total,
   deleteLabel,
   onDelete,
+  children,
 }: {
   total?: { cents: number; kind: "expense" | "income" };
   deleteLabel?: string;
   onDelete?: () => void;
+  children?: React.ReactNode; // ações extras antes do total (ex.: Pagar fatura)
 }) {
-  if (!total && !onDelete) return null;
+  if (!total && !onDelete && !children) return null;
   return (
-    <div className="ml-auto flex items-center gap-1">
+    <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
+      {children}
       {total ? (
         <p className="text-[17px] font-semibold">
           <span className="sr-only">Total: </span>
@@ -635,6 +661,7 @@ function InvoiceSection({
   today,
   filtered,
   onDeleteInvoice,
+  onPay,
   ...props
 }: SectionProps & {
   item: MonthInvoice;
@@ -642,11 +669,15 @@ function InvoiceSection({
   today: string;
   filtered: boolean;
   onDeleteInvoice?: () => void;
+  onPay: () => void;
 }) {
   const { card, invoice } = item;
   const bodyId = `secao-fatura-${card.id}`;
   const late = invoice.remainingCents > 0 && invoice.dueDate < today;
-  const status = invoice.status === "closed" && invoice.remainingCents === 0 && invoice.chargesCents > 0 ? "paga" : STATUS[invoice.status];
+  // Paga: nada a pagar e com compras. Com pagamento lançado mostra a data; importada como paga, não.
+  const paid = invoice.remainingCents === 0 && invoice.chargesCents > 0;
+  const status = paid ? (item.paidOn ? `paga em ${formatDayMonth(item.paidOn)}` : "paga") : STATUS[invoice.status];
+  const payable = invoice.remainingCents > 0 && invoice.status !== "future";
   const title = `Fatura ${card.name} · ${monthName(month)}`;
   return (
     <section id={`fatura-${card.id}`} className="flex scroll-mt-4 flex-col gap-4 rounded-[14px] border border-border bg-card p-5 md:p-6">
@@ -673,7 +704,20 @@ function InvoiceSection({
           total={{ cents: invoice.chargesCents, kind: invoice.chargesCents >= 0 ? "expense" : "income" }}
           deleteLabel={`Excluir fatura ${card.name} de ${monthName(month)}`}
           onDelete={onDeleteInvoice}
-        />
+        >
+          {payable ? (
+            item.paymentAccount ? (
+              <Button variant="outline" onClick={onPay}>
+                <Banknote aria-hidden />
+                Pagar fatura
+              </Button>
+            ) : (
+              <Link href={`/configuracoes/contas/${card.id}`} className={buttonVariants({ variant: "outline" })}>
+                Escolher conta que paga
+              </Link>
+            )
+          ) : null}
+        </HeaderEnd>
       </header>
 
       <dl className="grid grid-cols-2 gap-3 rounded-xl bg-background p-3 text-sm md:max-w-sm">
@@ -785,5 +829,90 @@ function InvoiceConfirm({
         </Button>
       </AlertDialogFooter>
     </>
+  );
+}
+
+// "Pagar fatura": valor editável (padrão = o que falta; de R$ 0,01 até o que falta) e data
+// (padrão hoje). O servidor recalcula o que falta e confere os limites de novo.
+function PayConfirm({
+  item,
+  month,
+  today,
+  pending,
+  onConfirm,
+}: {
+  item: MonthInvoice;
+  month: string;
+  today: string;
+  pending: boolean;
+  onConfirm: (amountCents: number, occurredOn: string) => void;
+}) {
+  const remaining = item.invoice.remainingCents;
+  const [amount, setAmount] = useState(formatAmountInput(remaining));
+  const [date, setDate] = useState(today);
+  const [error, setError] = useState<string | null>(null);
+  const submit = () => {
+    const cents = parseBRL(amount);
+    if (cents === null || cents < 1) return setError("Informe um valor a partir de R$ 0,01.");
+    if (cents > remaining) return setError(`O valor passa do que falta (${formatBRL(remaining)}).`);
+    if (!date) return setError("Informe a data do pagamento.");
+    setError(null);
+    onConfirm(cents, date);
+  };
+  return (
+    <form
+      className="contents"
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+      noValidate
+    >
+      <AlertDialogHeader>
+        <AlertDialogTitle>
+          Pagar a fatura {item.card.name} · {monthName(month)}
+        </AlertDialogTitle>
+        <AlertDialogDescription>
+          Falta <span className="font-mono">{formatBRL(remaining)}</span>. Sai de {item.paymentAccount?.name} e entra no
+          cartão como pagamento desta fatura. Para pagar só uma parte, mude o valor.
+        </AlertDialogDescription>
+      </AlertDialogHeader>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="pagar-valor">Valor</Label>
+          <input
+            id="pagar-valor"
+            inputMode="decimal"
+            autoComplete="off"
+            value={amount}
+            onChange={(event) => setAmount(event.target.value)}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? "pagar-erro" : undefined}
+            className={cn(selectClassName, "font-mono")}
+          />
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="pagar-data">Data do pagamento</Label>
+          <input
+            id="pagar-data"
+            type="date"
+            value={date}
+            onChange={(event) => setDate(event.target.value)}
+            className={selectClassName}
+          />
+        </div>
+      </div>
+      {error ? (
+        <p id="pagar-erro" role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+      <AlertDialogFooter>
+        <AlertDialogCancel disabled={pending}>Voltar</AlertDialogCancel>
+        <Button type="submit" disabled={pending}>
+          {pending ? "Pagando…" : "Pagar"}
+        </Button>
+      </AlertDialogFooter>
+    </form>
   );
 }

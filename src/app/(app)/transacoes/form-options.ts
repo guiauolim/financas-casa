@@ -1,4 +1,5 @@
 import "server-only";
+import { defaultPaymentAccount } from "@/lib/finance/payment-account";
 import { listAccounts } from "@/lib/services/accounts";
 import { listCategories } from "@/lib/services/categories";
 import { listMembers } from "@/lib/services/households";
@@ -10,7 +11,12 @@ export async function loadFormOptions(
   db: Db,
   householdId: string,
   keep: { accountIds?: (string | null | undefined)[]; categoryId?: string | null } = {},
-): Promise<{ accounts: FormAccount[]; categories: FormCategory[]; members: FormMember[] }> {
+): Promise<{
+  accounts: FormAccount[];
+  categories: FormCategory[];
+  members: FormMember[];
+  defaultIncomeAccountId: string | null; // Conta Conjunta: sugerida para receitas novas
+}> {
   const [accounts, categories, members] = await Promise.all([
     listAccounts(db, { householdId, includeArchived: true }),
     listCategories(db, { householdId, includeArchived: true }),
@@ -25,5 +31,6 @@ export async function loadFormOptions(
       .filter((c) => !c.archived || c.id === keep.categoryId)
       .map(({ id, name, type, householdDefault }) => ({ id, name, type, householdDefault })),
     members: members.map(({ userId, displayName }) => ({ userId, displayName })),
+    defaultIncomeAccountId: defaultPaymentAccount(accounts)?.id ?? null,
   };
 }

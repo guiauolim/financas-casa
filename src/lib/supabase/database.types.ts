@@ -30,6 +30,7 @@ export type Database = {
           opening_balance_cents: number
           opening_balance_date: string | null
           owner_user_id: string | null
+          payment_account_id: string | null
         }
         Insert: {
           aliases?: string[]
@@ -46,6 +47,7 @@ export type Database = {
           opening_balance_cents?: number
           opening_balance_date?: string | null
           owner_user_id?: string | null
+          payment_account_id?: string | null
         }
         Update: {
           aliases?: string[]
@@ -62,6 +64,7 @@ export type Database = {
           opening_balance_cents?: number
           opening_balance_date?: string | null
           owner_user_id?: string | null
+          payment_account_id?: string | null
         }
         Relationships: [
           {
@@ -77,6 +80,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "accounts_payment_account_id_fkey"
+            columns: ["payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -585,7 +595,6 @@ export type Database = {
           display_name: string
           household_id: string
           phone_e164: string | null
-          spending_view: string
           user_id: string
         }
         Insert: {
@@ -593,7 +602,6 @@ export type Database = {
           display_name: string
           household_id: string
           phone_e164?: string | null
-          spending_view?: string
           user_id: string
         }
         Update: {
@@ -601,7 +609,6 @@ export type Database = {
           display_name?: string
           household_id?: string
           phone_e164?: string | null
-          spending_view?: string
           user_id?: string
         }
         Relationships: [
@@ -622,7 +629,6 @@ export type Database = {
           category_id: string | null
           created_at: string
           created_by: string | null
-          deleted_at: string | null
           description: string | null
           household_id: string
           id: string
@@ -645,7 +651,6 @@ export type Database = {
           category_id?: string | null
           created_at?: string
           created_by?: string | null
-          deleted_at?: string | null
           description?: string | null
           household_id: string
           id?: string
@@ -668,7 +673,6 @@ export type Database = {
           category_id?: string | null
           created_at?: string
           created_by?: string | null
-          deleted_at?: string | null
           description?: string | null
           household_id?: string
           id?: string

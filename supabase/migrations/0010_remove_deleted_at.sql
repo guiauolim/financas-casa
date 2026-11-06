@@ -1,8 +1,6 @@
--- supabase/pending/0010_remove_deleted_at.sql (vai para supabase/migrations/ depois do deploy)
--- Fica em supabase/pending/ para o `db push` não aplicar antes da hora. Depois do deploy:
---   mv supabase/pending/0010_remove_deleted_at.sql supabase/migrations/ && pnpm supabase db push && pnpm db:types
--- ⚠️ Aplicar SÓ DEPOIS do merge de feat/transacoes-por-mes e do deploy na Vercel: o código
--- anterior lê e grava deleted_at (lixeira) e quebraria sem a coluna.
+-- supabase/migrations/0010_remove_deleted_at.sql
+-- Aplicada DEPOIS do deploy de feat/transacoes-por-mes (PR #7): o código no ar não usa mais
+-- deleted_at (exclusão definitiva) nem profiles.spending_view (gasto sempre por fatura).
 -- Remove o que sobrou da lixeira e da visão do gasto por usuário.
 
 -- O que o código antigo ainda tiver mandado para a lixeira entre a 0009 e o deploy.

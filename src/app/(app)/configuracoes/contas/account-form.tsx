@@ -23,15 +23,21 @@ export type AccountFormValues = {
   creditLimitCents: number | null;
   openingBalanceCents: number;
   openingBalanceDate: string | null;
+  paymentAccountId: string | null;
 };
+
+// Contas que podem pagar a fatura (ativas, não cartão); `defaultId` = a padrão (Conta Conjunta).
+export type PaymentAccountOptions = { accounts: { id: string; name: string }[]; defaultId: string | null };
 
 export function AccountForm({
   account,
   members,
+  paymentAccounts,
   today,
 }: {
   account?: AccountFormValues;
   members: { userId: string; displayName: string }[];
+  paymentAccounts: PaymentAccountOptions;
   today: string;
 }) {
   const [state, action, pending] = useActionState(saveAccountAction, {} as FormState);
@@ -119,6 +125,24 @@ export function AccountForm({
             defaultValue={account?.creditLimitCents ? formatAmountInput(account.creditLimitCents) : undefined}
             error={errors.creditLimitCents}
           />
+          <div className="sm:col-span-3">
+            <SelectField
+              name="paymentAccountId"
+              label="Conta que paga a fatura"
+              defaultValue={account?.paymentAccountId ?? paymentAccounts.defaultId ?? ""}
+              hint="O botão Pagar fatura, em Transações, cria a transferência desta conta para o cartão."
+              error={errors.paymentAccountId}
+            >
+              <option value="">{paymentAccounts.defaultId ? "Padrão (conta corrente conjunta)" : "Nenhuma"}</option>
+              {paymentAccounts.accounts
+                .filter((a) => a.id !== account?.id)
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name}
+                  </option>
+                ))}
+            </SelectField>
+          </div>
           <div className="sm:col-span-3">
             <Segmented
               name="invoiceNaming"

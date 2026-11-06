@@ -88,6 +88,7 @@ export function TransactionForm({
   members,
   currentUserId,
   today,
+  defaultIncomeAccountId = null,
 }: {
   transaction?: TransactionFormValues;
   accounts: FormAccount[];
@@ -95,6 +96,7 @@ export function TransactionForm({
   members: FormMember[];
   currentUserId: string;
   today: string;
+  defaultIncomeAccountId?: string | null; // novo lançamento: receita já vem com a Conta Conjunta
 }) {
   const [state, action, pending] = useActionState(saveTransactionAction, {} as FormState);
   const errors = state.fieldErrors ?? {};
@@ -104,6 +106,16 @@ export function TransactionForm({
   const [amount, setAmount] = useState(transaction ? formatAmountInput(transaction.amountCents) : "");
   const [date, setDate] = useState(transaction?.occurredOn ?? today);
   const [accountId, setAccountId] = useState(transaction?.accountId ?? "");
+  // Receita nova sugere a Conta Conjunta (o "cofre"), enquanto a pessoa não escolher outra conta.
+  const [accountTouched, setAccountTouched] = useState(Boolean(transaction));
+  const chooseAccount = (id: string) => {
+    setAccountTouched(true);
+    setAccountId(id);
+  };
+  const changeType = (next: TxType) => {
+    setType(next);
+    if (!accountTouched && defaultIncomeAccountId) setAccountId(next === "income" ? defaultIncomeAccountId : "");
+  };
   const [transferAccountId, setTransferAccountId] = useState(transaction?.transferAccountId ?? "");
   const [installments, setInstallments] = useState("1");
   // De quem: segue a categoria (regra única defaultSpentBy) até a pessoa escolher à mão.
@@ -152,7 +164,7 @@ export function TransactionForm({
         name="type"
         legend="Tipo"
         value={type}
-        onChange={setType}
+        onChange={changeType}
         options={TX_TYPES.map((t) => ({ value: t, label: TX_TYPE_LABELS[t], disabled: isInstallment && t !== "expense" }))}
         error={errors.type}
       />
@@ -202,7 +214,7 @@ export function TransactionForm({
             name="accountId"
             label="De"
             value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
+            onChange={(e) => chooseAccount(e.target.value)}
             required
             error={errors.accountId}
           >
@@ -245,7 +257,7 @@ export function TransactionForm({
             name="accountId"
             label={type === "income" ? "Conta que recebeu" : "Conta ou cartão"}
             value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
+            onChange={(e) => chooseAccount(e.target.value)}
             required
             error={errors.accountId}
             hint={

@@ -53,7 +53,7 @@ src/
                                          # pelas Server Actions do site E pelas tools do bot
     services/errors.ts       # ServiceError (mensagem PT-BR para o usuário)
     finance/{money,dates,ledger,billing,balances,installments,phone,summary,budget,insights,portfolio,networth,
-             spent-by,categorize,spending-view,month-view}.ts # regras puras (testáveis)
+             spent-by,categorize,spending-view,month-view,payment-account}.ts # regras puras (testáveis)
     importers/excel.ts       # helpers de planilha (magic bytes, números/datas BR, leitura) — B3 e faturas
     importers/limits.ts      # MAX_UPLOAD_BYTES (sem dependências: usado também no navegador)
     importers/b3-excel.ts    # Excel de posição da B3 -> ativos normalizados (puro, sem I/O)
@@ -62,9 +62,9 @@ src/
   proxy.ts                   # Next 16: substitui o middleware.ts
 supabase/
   migrations/                # 0001_init … 0005_investimentos, 0006_import_fatura_pessoas, 0007_faturas_pagas,
-                             # 0008_fatura_referencia, 0009_exclusao_definitiva
-  pending/                   # migrations preparadas que NÃO podem ir no próximo `db push` (ex.: 0010_remove_deleted_at,
-                             # só depois do deploy: mover para migrations/ e dar push)
+                             # 0008_fatura_referencia, 0009_exclusao_definitiva, 0010_remove_deleted_at, 0011_conta_pagamento_fatura
+  pending/                   # (criar quando preciso) migrations que NÃO podem ir no próximo `db push`;
+                             # só depois do deploy: mover para migrations/ e dar push
   seed.sql                   # só dev local (`supabase db reset`); nunca vai para o remoto
   templates/                 # e-mails do Auth (magic link, convite) em PT-BR
 scripts/make-{b3,itau}-fixture.mjs  # geram as fixtures fictícias dos importadores
@@ -90,6 +90,13 @@ docs/ROADMAP.md
 - Parcelado: criar N transações filhas com `installment_group_id`, `installment_number`, `installment_total`
   (`planInstallments` em `lib/finance/installments.ts`; resto de centavos na 1ª parcela).
 - Pagamento de fatura = **transferência** da conta para o cartão (não é despesa: o gasto já foi contado na compra).
+- Conta Conjunta = o "cofre" da casa: salários entram, pix/débito saem e a fatura é paga por ela; o saldo
+  vem só dos lançamentos (saldo inicial R$ 0 em 01/10/2026). Cada cartão tem a conta que paga a fatura
+  (`accounts.payment_account_id`; vazio = a padrão, `defaultPaymentAccount` em `lib/finance/payment-account.ts`:
+  conta corrente conjunta ativa). **Sem pagamento automático**: o pagamento é sempre uma transferência
+  lançada — pelo botão "Pagar fatura" de Transações (`payCardInvoice`: valor de R$ 0,01 até o que falta,
+  recalculado no servidor; data editável; grava `invoice_ref` da fatura) ou à mão. Receita nova sugere a
+  mesma conta.
 - Fatura: compra no melhor dia (`closing_day`) ou depois cai na fatura seguinte; dia 31 em mês curto = último dia.
 
 ## Tela Transações (o mês manda em tudo)
@@ -103,10 +110,12 @@ docs/ROADMAP.md
   `month_installment_totals`, tudo em paralelo. No cliente (`month-browser.tsx`): meses em memória,
   prefetch do anterior/próximo via GET `/transacoes/dados?mes=`, URL por `history.pushState/replaceState`
   (sem render no servidor), filtros Conta/Categoria/Pessoa aplicados no navegador.
-- Exclusão é **definitiva** (sem lixeira; o código não usa mais `deleted_at`, que a 0010 remove depois do deploy): em lote (`deleteTransactions`,
+- Exclusão é **definitiva** (sem lixeira; a coluna `deleted_at` saiu na 0010): em lote (`deleteTransactions`,
   "só estas / e as próximas parcelas" via `planBatchDelete`) e "Excluir fatura" (`deleteInvoiceTransactions`:
   só os lançamentos do cartão naquela fatura). Confirmação sempre diz "Não dá para desfazer".
   O `undo_last` do bot apaga de vez o último lançamento (`deleteTransaction`).
+- Cada fatura com saldo (não futura) tem "Pagar fatura"; paga mostra "Paga em dd/mm" (`invoicePaidOn`:
+  último pagamento com a fatura gravada) ou "Paga" (importada como paga, sem pagamento lançado).
 
 ## Casa e pessoa ("de quem é o gasto")
 - `transactions.spent_by` = membro dono do gasto/receita; **null = Casa** (conjunto). É diferente de
