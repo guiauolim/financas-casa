@@ -62,7 +62,7 @@ src/
   proxy.ts                   # Next 16: substitui o middleware.ts
 supabase/
   migrations/                # 0001_init … 0005_investimentos, 0006_import_fatura_pessoas, 0007_faturas_pagas,
-                             # 0008_fatura_referencia, 0009_exclusao_definitiva, 0010_remove_deleted_at
+                             # 0008_fatura_referencia, 0009_exclusao_definitiva, 0010_remove_deleted_at, 0011_conta_pagamento_fatura
   pending/                   # (criar quando preciso) migrations que NÃO podem ir no próximo `db push`;
                              # só depois do deploy: mover para migrations/ e dar push
   seed.sql                   # só dev local (`supabase db reset`); nunca vai para o remoto

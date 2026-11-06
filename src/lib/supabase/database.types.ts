@@ -30,6 +30,7 @@ export type Database = {
           opening_balance_cents: number
           opening_balance_date: string | null
           owner_user_id: string | null
+          payment_account_id: string | null
         }
         Insert: {
           aliases?: string[]
@@ -46,6 +47,7 @@ export type Database = {
           opening_balance_cents?: number
           opening_balance_date?: string | null
           owner_user_id?: string | null
+          payment_account_id?: string | null
         }
         Update: {
           aliases?: string[]
@@ -62,6 +64,7 @@ export type Database = {
           opening_balance_cents?: number
           opening_balance_date?: string | null
           owner_user_id?: string | null
+          payment_account_id?: string | null
         }
         Relationships: [
           {
@@ -77,6 +80,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "accounts_payment_account_id_fkey"
+            columns: ["payment_account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
           },
         ]
       }
