@@ -8,6 +8,14 @@ const ACCOUNT = "3f1c2b8e-6a4d-4b7e-9c1a-2d3e4f5a6b7c";
 const OTHER = "9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d";
 
 describe("accountSchema", () => {
+  it("cartão: conta que paga a fatura é um id ou vazio", () => {
+    const card = { name: "X", kind: "credit_card", ownerUserId: "joint", closingDay: "26", dueDay: "3" };
+    const id = "11111111-1111-4111-8111-111111111111";
+    expect(accountSchema.parse({ ...card, paymentAccountId: id })).toMatchObject({ paymentAccountId: id });
+    expect(accountSchema.parse({ ...card, paymentAccountId: "" })).toMatchObject({ paymentAccountId: null });
+    expect(accountSchema.safeParse({ ...card, paymentAccountId: "nao-e-id" }).success).toBe(false);
+  });
+
   it("cartão exige fechamento e vencimento; limite em formato BR", () => {
     const parsed = accountSchema.parse({
       name: " Nubank crédito ",
@@ -27,6 +35,7 @@ describe("accountSchema", () => {
       dueDay: 8,
       invoiceNaming: "closing",
       creditLimitCents: 1200000,
+      paymentAccountId: null, // vazio = a padrão (conta corrente conjunta)
     });
     expect(
       accountSchema.parse({ name: "X", kind: "credit_card", ownerUserId: "joint", closingDay: "26", dueDay: "3", invoiceNaming: "due" }),

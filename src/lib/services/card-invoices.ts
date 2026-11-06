@@ -1,12 +1,13 @@
 import "server-only";
 import { type CardAccount, cardInvoices, type InvoiceBalance, type InvoiceTotalRow, ledgerFromInvoiceTotals } from "@/lib/finance/balances";
 import { invoiceByRef, invoiceLabel, invoiceNameMonth, isInvoiceRef, refForNameMonth } from "@/lib/finance/billing";
-import { parseYearMonth } from "@/lib/finance/dates";
+import { parseISODate, parseYearMonth } from "@/lib/finance/dates";
 import type { LedgerEntry } from "@/lib/finance/ledger";
+import { cardPaymentAccount } from "@/lib/finance/payment-account";
 import { type CycleCard, isCycleCard, listAccounts } from "./accounts";
-import { throwIf } from "./errors";
+import { ServiceError, throwIf } from "./errors";
 import { listTransactions, type Transaction } from "./transactions";
-import type { Db } from "./types";
+import type { Actor, Db } from "./types";
 
 // Faturas do cartão: leitura pela fatura GRAVADA em cada lançamento (transactions.invoice_ref),
 // sem recalcular. Usado pela Visão geral, pelas seções de fatura de Transações e (fase do bot)
@@ -135,4 +136,66 @@ export async function findCardInvoicesByName(
     ),
   );
   return details.filter((d): d is CardInvoiceDetail => d !== null);
+}
+
+// ───────────────────────── Pagar fatura ─────────────────────────
+
+export type PayInvoiceInput = {
+  cardId: string;
+  ref: string; // fatura ("YYYY-MM" do fechamento)
+  occurredOn: string; // data do pagamento
+  amountCents: number; // de 1 centavo até o que falta (pagamento parcial permitido)
+};
+
+// "Pagar fatura": transferência da conta que paga a fatura (a do cartão ou a padrão, a Conta
+// Conjunta) para o cartão, com a fatura gravada. O que falta é recalculado aqui, nunca vem do
+// cliente. Não existe pagamento automático: só este botão (ou um lançamento à mão).
+export async function payCardInvoice(
+  db: Db,
+  actor: Actor,
+  { cardId, ref, occurredOn, amountCents }: PayInvoiceInput,
+  today: string,
+): Promise<{ id: string; remainingCents: number }> {
+  if (!isInvoiceRef(ref)) throw new ServiceError("Fatura inválida.");
+  if (!parseISODate(occurredOn)) throw new ServiceError("Data inválida.", "occurredOn");
+  if (!Number.isInteger(amountCents) || amountCents < 1) throw new ServiceError("Informe um valor a partir de R$ 0,01.", "amountCents");
+
+  const [accounts, ledger, settled] = await Promise.all([
+    listAccounts(db, { householdId: actor.householdId, includeArchived: true }),
+    listInvoiceTotals(db, { householdId: actor.householdId }),
+    listSettledInvoices(db, { householdId: actor.householdId }),
+  ]);
+  const card = accounts.find((a) => a.id === cardId);
+  if (!card || !isCycleCard(card)) throw new ServiceError("Cartão não encontrado.");
+  const payer = cardPaymentAccount(card, accounts);
+  if (!payer) throw new ServiceError("Escolha a conta que paga a fatura em Configurações → Contas.");
+
+  const { named, open } = cardInvoicesNamed(card, ledger, today, settled);
+  const invoice = findNamedInvoice(card, named, open.ref, ref);
+  if (invoice.status === "future") throw new ServiceError("Esta fatura ainda não abriu.");
+  if (invoice.remainingCents <= 0) throw new ServiceError("Esta fatura já está paga.");
+  if (amountCents > invoice.remainingCents) {
+    throw new ServiceError("O valor passa do que falta pagar nesta fatura.", "amountCents");
+  }
+
+  const { data, error } = await db
+    .from("transactions")
+    .insert({
+      household_id: actor.householdId,
+      created_by: actor.userId,
+      source: "web",
+      type: "transfer",
+      account_id: payer.id,
+      transfer_account_id: card.id,
+      amount_cents: amountCents,
+      occurred_on: occurredOn,
+      invoice_ref: ref,
+      category_id: null,
+      spent_by: null,
+      description: `Fatura ${card.name} · ${invoice.name}`,
+    })
+    .select("id")
+    .single();
+  throwIf(error);
+  return { id: data!.id, remainingCents: invoice.remainingCents - amountCents };
 }

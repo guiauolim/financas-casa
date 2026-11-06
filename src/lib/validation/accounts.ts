@@ -43,6 +43,12 @@ export const accountSchema = z.discriminatedUnion(
         .optional()
         .transform((v) => (v?.trim() ? v : undefined))
         .pipe(amountCents({ label: "o limite" }).optional()),
+      // Conta que paga a fatura ("" = a padrão, a conta corrente conjunta).
+      paymentAccountId: z
+        .string()
+        .optional()
+        .transform((v) => (v?.trim() ? v : null))
+        .pipe(uuid.nullable()),
     }),
     z.object({
       ...base,
@@ -73,6 +79,7 @@ export const ACCOUNT_FORM_FIELDS = [
   "dueDay",
   "invoiceNaming",
   "creditLimitCents",
+  "paymentAccountId",
   "openingBalanceCents",
   "openingBalanceDate",
 ] as const;

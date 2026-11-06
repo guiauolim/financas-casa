@@ -17,10 +17,12 @@ export type Account = {
   openingBalanceDate: string | null;
   aliases: string[];
   archived: boolean;
+  // Cartão: conta que paga a fatura (null = a padrão, ver lib/finance/payment-account).
+  paymentAccountId: string | null;
 };
 
 const COLUMNS =
-  "id, name, kind, owner_user_id, closing_day, due_day, invoice_naming, credit_limit_cents, opening_balance_cents, opening_balance_date, aliases, archived";
+  "id, name, kind, owner_user_id, closing_day, due_day, invoice_naming, credit_limit_cents, opening_balance_cents, opening_balance_date, aliases, archived, payment_account_id";
 
 type Row = {
   id: string;
@@ -35,6 +37,7 @@ type Row = {
   opening_balance_date: string | null;
   aliases: string[];
   archived: boolean;
+  payment_account_id: string | null;
 };
 
 const toAccount = (row: Row): Account => ({
@@ -50,6 +53,7 @@ const toAccount = (row: Row): Account => ({
   openingBalanceDate: row.opening_balance_date,
   aliases: row.aliases,
   archived: row.archived,
+  paymentAccountId: row.payment_account_id,
 });
 
 const KIND_ORDER: AccountKind[] = ["checking", "credit_card", "savings", "meal_voucher", "cash"];
@@ -96,6 +100,15 @@ async function assertOwnerInHousehold(db: Db, householdId: string, ownerUserId: 
   if (!data) throw new ServiceError("Escolha um membro da casa como dono.", "ownerUserId");
 }
 
+// Conta que paga a fatura: da casa, ativa e que não seja cartão.
+async function assertPaymentAccount(db: Db, householdId: string, paymentAccountId: string | null) {
+  if (!paymentAccountId) return;
+  const account = await getAccount(db, { householdId, accountId: paymentAccountId });
+  if (!account || account.archived || account.kind === "credit_card") {
+    throw new ServiceError("Escolha uma conta ativa da casa (não um cartão) para pagar a fatura.", "paymentAccountId");
+  }
+}
+
 function toRow(input: AccountInput) {
   const card = input.kind === "credit_card";
   return {
@@ -107,6 +120,7 @@ function toRow(input: AccountInput) {
     due_day: card ? input.dueDay : null,
     ...(card ? { invoice_naming: input.invoiceNaming } : {}),
     credit_limit_cents: card ? (input.creditLimitCents ?? null) : null,
+    payment_account_id: card ? (input.paymentAccountId ?? null) : null,
     opening_balance_cents: card ? 0 : input.openingBalanceCents,
     opening_balance_date: card ? null : (input.openingBalanceDate ?? null),
   };
@@ -114,6 +128,7 @@ function toRow(input: AccountInput) {
 
 export async function createAccount(db: Db, actor: Actor, input: AccountInput): Promise<string> {
   await assertOwnerInHousehold(db, actor.householdId, input.ownerUserId);
+  if (input.kind === "credit_card") await assertPaymentAccount(db, actor.householdId, input.paymentAccountId ?? null);
   const { data, error } = await db
     .from("accounts")
     .insert({ ...toRow(input), household_id: actor.householdId })
@@ -131,6 +146,10 @@ export async function updateAccount(db: Db, actor: Actor, accountId: string, inp
     throw new ServiceError("Não dá para transformar cartão em conta (ou o contrário). Crie uma nova.", "kind");
   }
   await assertOwnerInHousehold(db, actor.householdId, input.ownerUserId);
+  if (input.kind === "credit_card") {
+    if (input.paymentAccountId === accountId) throw new ServiceError("O cartão não paga a própria fatura.", "paymentAccountId");
+    await assertPaymentAccount(db, actor.householdId, input.paymentAccountId ?? null);
+  }
   const { error } = await db
     .from("accounts")
     .update(toRow(input))

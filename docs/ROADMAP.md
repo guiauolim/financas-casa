@@ -167,6 +167,15 @@ pessoa (card_holders, mesmo cartão), classificação por comércio com regras a
 - [x] Depois do merge e do deploy: `0010_remove_deleted_at.sql` (remove `deleted_at`, índices antigos e
   `profiles.spending_view`), aplicada
 
+## Fase 4.8 — Pagar fatura pela Conta Conjunta ✅ concluída
+**Entregue** (branch `feat/pagar-fatura`):
+- Migration `0011_conta_pagamento_fatura.sql` (só adiciona): `accounts.payment_account_id`, com a conta
+  corrente conjunta como padrão nos cartões existentes
+- Configurações → cartão: "Conta que paga a fatura"
+- Transações: "Pagar fatura" em cada fatura (valor editável até o que falta, data editável, padrão hoje);
+  "Paga em dd/mm". Sem pagamento automático no vencimento
+- Novo lançamento: receita sugere a Conta Conjunta
+
 ---
 
 # Etapa B — WhatsApp
