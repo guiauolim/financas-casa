@@ -270,13 +270,13 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
 
       <div className={cn("flex flex-col gap-4 transition-opacity", pending && "opacity-60")} aria-busy={pending}>
         <div className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-4">
-          <Kpi label="Total do mês" value={<Money cents={totals.totalCents} />} hint="Saídas: cartão + fora do cartão." />
           <Kpi
             label="Receitas do mês"
             value={<Money cents={totals.incomeCents} kind="income" />}
             hint="Salário e outras entradas nas contas."
           />
-          <Kpi label="Saldo do mês" value={<Money cents={totals.balanceCents} />} hint="Receitas − total do mês." />
+          <Kpi label="Despesas do mês" value={<Money cents={totals.totalCents} />} hint="Cartão + fora do cartão." />
+          <Kpi label="Saldo do mês" value={<Money cents={totals.balanceCents} />} hint="Receitas − despesas do mês." />
         </div>
 
         {empty ? (
@@ -293,6 +293,22 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
           />
         ) : (
           <>
+            <Section
+              id="receitas"
+              icon={ArrowUpRight}
+              title="Receitas"
+              subtitle="Salário e outras entradas nas contas com data no mês."
+              total={{ cents: totals.incomeCents, kind: "income" }}
+              deleteLabel="Excluir as receitas do mês"
+              onDelete={outside.incomes.length ? () => confirmBatch(outside.incomes) : undefined}
+              transactions={outside.incomes}
+              empty={hasFilters ? "Nenhuma receita com esses filtros." : "Nenhuma receita neste mês."}
+              collapsed={collapsed.has("receitas")}
+              onToggleCollapsed={() => toggleCollapsed("receitas")}
+              selection={selection}
+              onSelectAll={setMany}
+              memberIndex={memberIndex}
+            />
             {groups.invoices.map((section) => {
               const item = data.invoices.find((i) => i.card.id === section.cardId)!;
               const all = data.transactions.filter((tx) => tx.account.id === section.cardId && tx.invoiceRef === section.ref);
@@ -330,22 +346,6 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
               empty={hasFilters ? "Nenhuma despesa fora do cartão com esses filtros." : "Nenhuma despesa fora do cartão neste mês."}
               collapsed={collapsed.has("despesas")}
               onToggleCollapsed={() => toggleCollapsed("despesas")}
-              selection={selection}
-              onSelectAll={setMany}
-              memberIndex={memberIndex}
-            />
-            <Section
-              id="receitas"
-              icon={ArrowUpRight}
-              title="Receitas"
-              subtitle="Salário e outras entradas nas contas com data no mês."
-              total={{ cents: totals.incomeCents, kind: "income" }}
-              deleteLabel="Excluir as receitas do mês"
-              onDelete={outside.incomes.length ? () => confirmBatch(outside.incomes) : undefined}
-              transactions={outside.incomes}
-              empty={hasFilters ? "Nenhuma receita com esses filtros." : "Nenhuma receita neste mês."}
-              collapsed={collapsed.has("receitas")}
-              onToggleCollapsed={() => toggleCollapsed("receitas")}
               selection={selection}
               onSelectAll={setMany}
               memberIndex={memberIndex}
