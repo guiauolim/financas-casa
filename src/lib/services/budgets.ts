@@ -10,12 +10,15 @@ import {
 } from "@/lib/finance/budget";
 import { invoiceByRef, invoiceLabel, refForNameMonth } from "@/lib/finance/billing";
 import { toYearMonth, type YearMonth } from "@/lib/finance/dates";
-import type { LedgerEntry } from "@/lib/finance/ledger";
+import { type LedgerEntry, purchaseMonthOf as purchaseMonthOfFallback } from "@/lib/finance/ledger";
+import { type MonthPlan, monthPlan } from "@/lib/finance/month-plan";
 import { type CardPacing, cardPacing } from "@/lib/finance/pacing";
+import { pendingOnAccount, type RecurringMonth, recurringMonth } from "@/lib/finance/recurring";
 import { type BudgetInput, budgetColumns } from "@/lib/validation/budgets";
 import { isUniqueViolation, ServiceError, throwIf } from "./errors";
 import { entryInvoiceRef, invoiceMonthOf } from "@/lib/finance/spending-view";
-import { type CycleCard, isCycleCard, listAccounts } from "./accounts";
+import { type Account, type CycleCard, isCycleCard, listAccounts } from "./accounts";
+import { listRecurringBills, type RecurringBillRow } from "./recurring-bills";
 import { listLedger } from "./transactions";
 import type { Actor, Db } from "./types";
 
@@ -166,6 +169,9 @@ export type BudgetStatusReport = {
   cards: (BudgetWithStatus & { days: { date: string; spentCents: number }[] })[];
   // Limite da fatura com o ritmo semanal (fatura com o nome do mês escolhido).
   invoices: InvoiceBudget[];
+  // Contas fixas do mês (null = nenhuma cadastrada) e o plano do mês (sobra prevista).
+  recurring: RecurringMonth<RecurringBillRow> | null;
+  plan: MonthPlan;
 };
 
 export type InvoiceBudget = BudgetWithStatus & {
@@ -207,11 +213,21 @@ export function invoicePacing(
 export function buildBudgetStatus(
   budgets: readonly Budget[],
   ledger: readonly LedgerEntry[],
-  context: BudgetContext & { cards?: readonly CycleCard[]; extras?: CommittedExtras },
+  context: BudgetContext & {
+    accounts?: readonly Account[]; // todas as contas (cartões com ciclo têm limite da fatura)
+    bills?: readonly RecurringBillRow[];
+  },
 ): BudgetStatusReport {
-  const { month, today, cards = [], extras } = context;
+  const { month, today, accounts = [], bills = [], monthOf = purchaseMonthOfFallback } = context;
   const evaluated = budgets.map((b) => ({ ...b, ...evaluateBudget(b, ledger, context) }));
-  const cardById = new Map(cards.map((c) => [c.id, c]));
+  const cardById = new Map(accounts.filter(isCycleCard).map((c) => [c.id, c]));
+  const recurring = bills.length ? recurringMonth(bills, ledger, { month, today, monthOf }) : null;
+  // Contas fixas do cartão ainda não lançadas entram como comprometido na fatura do mês.
+  const extras: CommittedExtras = (cardId) => (recurring ? pendingOnAccount(recurring, cardId) : 0);
+  const invoices = evaluated.flatMap((b) => {
+    const card = b.scope === "invoice" && b.accountId ? cardById.get(b.accountId) : undefined;
+    return card ? [invoicePacing(b, card, ledger, { month, today }, extras)] : [];
+  });
   return {
     month,
     today,
@@ -224,9 +240,15 @@ export function buildBudgetStatus(
       .filter((b) => b.scope === "card")
       .map((b) => ({ ...b, days: weeklyByDay(ledger, today, b.accountId) }))
       .sort((a, b) => b.percent - a.percent),
-    invoices: evaluated.flatMap((b) => {
-      const card = b.scope === "invoice" && b.accountId ? cardById.get(b.accountId) : undefined;
-      return card ? [invoicePacing(b, card, ledger, { month, today }, extras)] : [];
+    invoices,
+    recurring,
+    plan: monthPlan({
+      entries: ledger,
+      month,
+      monthOf,
+      cardIds: new Set(accounts.filter((a) => a.kind === "credit_card").map((a) => a.id)),
+      invoiceLimits: new Map(invoices.map((b) => [b.accountId!, b.limitCents])),
+      recurring,
     }),
   };
 }
@@ -241,14 +263,15 @@ export async function getBudgetStatus(
     today,
   }: { householdId: string; month: YearMonth; today: string },
 ): Promise<BudgetStatusReport> {
-  const [budgets, ledger, accounts] = await Promise.all([
+  const [budgets, ledger, accounts, bills] = await Promise.all([
     listBudgets(db, { householdId }),
     listLedger(db, { householdId }),
     listAccounts(db, { householdId, includeArchived: true }),
+    listRecurringBills(db, { householdId }),
   ]);
   const cards = accounts.filter(isCycleCard);
   const monthOf = invoiceMonthOf(
     cards.map((c) => ({ id: c.id, closingDay: c.closingDay, dueDay: c.dueDay, naming: c.invoiceNaming })),
   );
-  return buildBudgetStatus(budgets, ledger, { month, today, monthOf, cards });
+  return buildBudgetStatus(budgets, ledger, { month, today, monthOf, accounts, bills });
 }

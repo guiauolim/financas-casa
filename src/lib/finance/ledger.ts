@@ -12,6 +12,7 @@ export type LedgerEntry = {
   // Fatura gravada no lançamento ("YYYY-MM" do fechamento): no cartão, a fatura da compra; num
   // pagamento (transferência para o cartão), a fatura paga. null/ausente = calcular pela data.
   invoiceRef?: string | null;
+  recurringBillId?: string | null; // conta fixa ligada (lib/finance/recurring)
 };
 
 export type DateRange = { from: string; to: string }; // inclusivo

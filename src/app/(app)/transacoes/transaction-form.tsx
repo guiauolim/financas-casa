@@ -40,6 +40,18 @@ export type TransactionFormValues = {
   invoiceRef: string | null; // fatura gravada (ex.: a do arquivo importado)
 };
 
+// "Lançar" de uma conta fixa: despesa já preenchida e ligada a ela (recurringBillId).
+export type BillPrefill = {
+  id: string;
+  name: string;
+  amountCents: number;
+  occurredOn: string;
+  accountId: string;
+  categoryId: string;
+  spentBy: string | null;
+  month: string; // mês da conta fixa ("YYYY-MM"): volta para ele em Orçamentos
+};
+
 const cycleOf = (account: FormAccount | undefined) =>
   account?.kind === "credit_card" && account.closingDay && account.dueDay
     ? { closingDay: account.closingDay, dueDay: account.dueDay }
@@ -89,6 +101,7 @@ export function TransactionForm({
   currentUserId,
   today,
   defaultIncomeAccountId = null,
+  fromBill,
 }: {
   transaction?: TransactionFormValues;
   accounts: FormAccount[];
@@ -97,17 +110,20 @@ export function TransactionForm({
   currentUserId: string;
   today: string;
   defaultIncomeAccountId?: string | null; // novo lançamento: receita já vem com a Conta Conjunta
+  fromBill?: BillPrefill;
 }) {
   const [state, action, pending] = useActionState(saveTransactionAction, {} as FormState);
   const errors = state.fieldErrors ?? {};
   const isInstallment = Boolean(transaction?.installment);
 
   const [type, setType] = useState<TxType>(transaction?.type ?? "expense");
-  const [amount, setAmount] = useState(transaction ? formatAmountInput(transaction.amountCents) : "");
-  const [date, setDate] = useState(transaction?.occurredOn ?? today);
-  const [accountId, setAccountId] = useState(transaction?.accountId ?? "");
+  const [amount, setAmount] = useState(
+    transaction ? formatAmountInput(transaction.amountCents) : fromBill ? formatAmountInput(fromBill.amountCents) : "",
+  );
+  const [date, setDate] = useState(transaction?.occurredOn ?? fromBill?.occurredOn ?? today);
+  const [accountId, setAccountId] = useState(transaction?.accountId ?? fromBill?.accountId ?? "");
   // Receita nova sugere a Conta Conjunta (o "cofre"), enquanto a pessoa não escolher outra conta.
-  const [accountTouched, setAccountTouched] = useState(Boolean(transaction));
+  const [accountTouched, setAccountTouched] = useState(Boolean(transaction || fromBill));
   const chooseAccount = (id: string) => {
     setAccountTouched(true);
     setAccountId(id);
@@ -120,9 +136,9 @@ export function TransactionForm({
   const [installments, setInstallments] = useState("1");
   // De quem: segue a categoria (regra única defaultSpentBy) até a pessoa escolher à mão.
   const [spentBy, setSpentBy] = useState(
-    transaction ? spentByToParam(transaction.spentBy) : spentByToParam(currentUserId),
+    spentByToParam(transaction ? transaction.spentBy : fromBill ? fromBill.spentBy : currentUserId),
   );
-  const [spentByTouched, setSpentByTouched] = useState(Boolean(transaction));
+  const [spentByTouched, setSpentByTouched] = useState(Boolean(transaction || fromBill));
   const onCategoryChange = (categoryId: string) => {
     if (spentByTouched) return;
     const category = categories.find((c) => c.id === categoryId);
@@ -159,6 +175,18 @@ export function TransactionForm({
   return (
     <form action={action} className="flex flex-col gap-4" noValidate>
       {transaction ? <input type="hidden" name="id" value={transaction.id} /> : null}
+      {fromBill && type === "expense" ? (
+        <>
+          <input type="hidden" name="recurringBillId" value={fromBill.id} />
+          <input type="hidden" name="backMonth" value={fromBill.month} />
+          <p className="flex gap-2 rounded-lg bg-primary-soft px-3 py-2 text-[13px] text-primary-soft-foreground" role="status">
+            <Info className="mt-0.5 size-4 shrink-0" strokeWidth={2} aria-hidden />
+            <span>
+              Conta fixa “{fromBill.name}” · previsto {formatBRL(fromBill.amountCents)}. Ajuste o valor se veio diferente.
+            </span>
+          </p>
+        </>
+      ) : null}
 
       <Segmented
         name="type"
@@ -275,7 +303,13 @@ export function TransactionForm({
             key={type}
             name="categoryId"
             label="Categoria"
-            defaultValue={transaction?.type === type ? (transaction.categoryId ?? "") : ""}
+            defaultValue={
+              transaction?.type === type
+                ? (transaction.categoryId ?? "")
+                : fromBill && type === "expense"
+                  ? fromBill.categoryId
+                  : ""
+            }
             onChange={(e) => onCategoryChange(e.target.value)}
             error={errors.categoryId}
           >
@@ -336,7 +370,7 @@ export function TransactionForm({
         name="description"
         label="Descrição (opcional)"
         placeholder={type === "transfer" ? "Ex.: Fatura de novembro" : "Ex.: Mercado do mês"}
-        defaultValue={transaction?.description ?? undefined}
+        defaultValue={transaction?.description ?? fromBill?.name ?? undefined}
         maxLength={200}
         error={errors.description}
       />

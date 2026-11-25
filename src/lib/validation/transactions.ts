@@ -41,7 +41,14 @@ export const transactionSchema = z
   .discriminatedUnion(
     "type",
     [
-      z.object({ ...common, type: z.literal("expense"), categoryId: optionalUuid, installments, spentBy: spentByField }),
+      z.object({
+        ...common,
+        type: z.literal("expense"),
+        categoryId: optionalUuid,
+        installments,
+        spentBy: spentByField,
+        recurringBillId: optionalUuid, // "Lançar" de uma conta fixa (só na criação)
+      }),
       z.object({ ...common, type: z.literal("income"), categoryId: optionalUuid, spentBy: spentByField }),
       z.object({
         ...common,
@@ -72,6 +79,7 @@ export const TRANSACTION_FORM_FIELDS = [
   "categoryId",
   "installments",
   "spentBy",
+  "recurringBillId",
 ] as const;
 
 export const scopeSchema = z.enum(["one", "following"]).catch("one");

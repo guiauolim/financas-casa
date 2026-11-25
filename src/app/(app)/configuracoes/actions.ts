@@ -10,12 +10,19 @@ import { createAccount, setAccountArchived, updateAccount } from "@/lib/services
 import { createCategory, setCategoryArchived, updateCategory } from "@/lib/services/categories";
 import { cancelInvite, updateMember } from "@/lib/services/households";
 import { deleteMerchantRule, updateMerchantRule } from "@/lib/services/merchant-rules";
+import {
+  createRecurringBill,
+  deleteRecurringBill,
+  setRecurringBillActive,
+  updateRecurringBill,
+} from "@/lib/services/recurring-bills";
 import { createClient } from "@/lib/supabase/server";
 import { ACCOUNT_FORM_FIELDS, accountSchema } from "@/lib/validation/accounts";
 import { CATEGORY_FORM_FIELDS, categorySchema } from "@/lib/validation/categories";
 import { type FormState, formValues } from "@/lib/validation/form";
 import { MERCHANT_RULE_FIELDS, merchantRuleSchema } from "@/lib/validation/merchant-rules";
 import { memberSchema } from "@/lib/validation/members";
+import { RECURRING_BILL_FIELDS, recurringBillSchema } from "@/lib/validation/recurring-bills";
 
 const idSchema = z.object({ id: z.uuid() });
 const archiveSchema = idSchema.extend({ archived: z.enum(["true", "false"]).transform((v) => v === "true") });
@@ -109,6 +116,51 @@ export async function deleteMerchantRuleAction(formData: FormData): Promise<Acti
   }
   refresh();
   return { success: "Regra apagada." };
+}
+
+// ───────────── Contas fixas ─────────────
+
+export async function saveRecurringBillAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  const actor = await requireActor();
+  const id = formData.get("id");
+  const parsed = recurringBillSchema.safeParse(formValues(formData, RECURRING_BILL_FIELDS));
+  if (!parsed.success) return invalidState(parsed.error);
+  try {
+    const db = await createClient();
+    if (typeof id === "string" && id) await updateRecurringBill(db, actor, z.uuid().parse(id), parsed.data);
+    else await createRecurringBill(db, actor, parsed.data);
+  } catch (error) {
+    return serviceErrorState(error, "Não foi possível salvar a conta fixa. Tente novamente.");
+  }
+  redirect("/configuracoes/contas-fixas");
+}
+
+const activeSchema = idSchema.extend({ active: z.enum(["true", "false"]).transform((v) => v === "true") });
+
+export async function setRecurringBillActiveAction(formData: FormData): Promise<ActionResult> {
+  const actor = await requireActor();
+  const parsed = activeSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: "Pedido inválido." };
+  try {
+    await setRecurringBillActive(await createClient(), actor, parsed.data.id, parsed.data.active);
+  } catch (error) {
+    return serviceErrorState(error, "Não foi possível atualizar a conta fixa.");
+  }
+  refresh();
+  return { success: parsed.data.active ? "Conta fixa reativada." : "Conta fixa pausada." };
+}
+
+export async function deleteRecurringBillAction(formData: FormData): Promise<ActionResult> {
+  const actor = await requireActor();
+  const parsed = idSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) return { error: "Pedido inválido." };
+  try {
+    await deleteRecurringBill(await createClient(), actor, parsed.data.id);
+  } catch (error) {
+    return serviceErrorState(error, "Não foi possível excluir a conta fixa.");
+  }
+  refresh();
+  return { success: "Conta fixa excluída." };
 }
 
 // ───────────── Membros e convites ─────────────

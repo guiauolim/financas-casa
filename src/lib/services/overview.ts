@@ -10,6 +10,7 @@ import { type NetWorthReport, netWorthForMonth } from "@/lib/finance/networth";
 import { expensesByCategory, expensesByPerson, type MonthTotals, monthlySeries, type Summary, summarizeMonth } from "@/lib/finance/summary";
 import { type Account, isCycleCard, listAccounts } from "./accounts";
 import { type BudgetStatusReport, type BudgetWithStatus, buildBudgetStatus, listBudgets } from "./budgets";
+import { listRecurringBills } from "./recurring-bills";
 import { listSettledInvoices, toCardAccount } from "./card-invoices";
 import { listCategories } from "./categories";
 import { listMembers } from "./households";
@@ -73,7 +74,7 @@ export async function getMonthOverview(
 ): Promise<MonthOverview> {
   const allMonths = requested === "all";
   const month = allMonths ? yearMonthOf(today) : requested;
-  const [ledger, budgetList, accounts, categoryList, investments, snapshots, members, settled] = await Promise.all([
+  const [ledger, budgetList, accounts, categoryList, investments, snapshots, members, settled, bills] = await Promise.all([
     listLedger(db, { householdId }),
     listBudgets(db, { householdId }),
     listAccounts(db, { householdId, includeArchived: true }),
@@ -82,6 +83,7 @@ export async function getMonthOverview(
     listSnapshots(db, { householdId }),
     listMembers(db, { householdId }),
     listSettledInvoices(db, { householdId }),
+    listRecurringBills(db, { householdId }),
   ]);
 
   const isCurrentMonth = compareYM(month, yearMonthOf(today)) === 0;
@@ -90,7 +92,7 @@ export async function getMonthOverview(
   const monthOf = invoiceMonthOf(
     cycleCards.map((c) => ({ id: c.id, closingDay: c.closingDay, dueDay: c.dueDay, naming: c.invoiceNaming })),
   );
-  const budgets = buildBudgetStatus(budgetList, ledger, { month, today, monthOf, cards: cycleCards });
+  const budgets = buildBudgetStatus(budgetList, ledger, { month, today, monthOf, accounts, bills });
   const period: Period = allMonths ? { until: month } : month;
   const firstMonth = firstMonthOf(ledger, month, monthOf);
   const monthsCount = allMonths && firstMonth ? monthsBetween(firstMonth, toYearMonth(month)) : 1;

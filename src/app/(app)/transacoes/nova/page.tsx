@@ -7,14 +7,17 @@ import { PageHeader } from "@/components/page-header";
 import { FormSkeleton, Panel } from "@/components/panel";
 import { buttonVariants } from "@/components/ui/button";
 import { requireActor } from "@/lib/auth/session";
-import { todayInSaoPaulo } from "@/lib/finance/dates";
+import { z } from "zod";
+import { clampedDate, parseYearMonth, todayInSaoPaulo } from "@/lib/finance/dates";
+import { getRecurringBill } from "@/lib/services/recurring-bills";
+import type { Db } from "@/lib/services/types";
 import { createClient } from "@/lib/supabase/server";
 import { loadFormOptions } from "../form-options";
-import { TransactionForm } from "../transaction-form";
+import { type BillPrefill, TransactionForm } from "../transaction-form";
 
 export const metadata: Metadata = { title: "Novo lançamento" };
 
-export default function NovaTransacaoPage() {
+export default function NovaTransacaoPage({ searchParams }: PageProps<"/transacoes/nova">) {
   return (
     <>
       <PageHeader
@@ -28,15 +31,44 @@ export default function NovaTransacaoPage() {
         }
       />
       <Suspense fallback={<FormSkeleton fields={6} />}>
-        <NewTransaction />
+        <NewTransaction searchParams={searchParams} />
       </Suspense>
     </>
   );
 }
 
-async function NewTransaction() {
+// "Lançar" de uma conta fixa (?conta-fixa=<id>&mes=YYYY-MM): despesa já preenchida. Data: no
+// cartão, o dia da cobrança (define a fatura); fora dele, hoje no mês atual ou o vencimento.
+async function billPrefill(db: Db, householdId: string, params: Record<string, string | string[] | undefined>, today: string) {
+  const id = z.uuid().safeParse(params["conta-fixa"]);
+  if (!id.success) return undefined;
+  const bill = await getRecurringBill(db, { householdId, billId: id.data });
+  if (!bill) return undefined;
+  const mes = typeof params.mes === "string" ? params.mes : "";
+  const month = parseYearMonth(mes) ?? parseYearMonth(today.slice(0, 7))!;
+  const dueDate = clampedDate(month, bill.dueDay);
+  const isCard = bill.account?.kind === "credit_card";
+  const occurredOn = !isCard && today.slice(0, 7) === dueDate.slice(0, 7) ? today : dueDate;
+  return {
+    id: bill.id,
+    name: bill.name,
+    amountCents: bill.amountCents,
+    occurredOn,
+    accountId: bill.accountId,
+    categoryId: bill.categoryId,
+    spentBy: bill.spentBy,
+    month: dueDate.slice(0, 7),
+  } satisfies BillPrefill;
+}
+
+async function NewTransaction({ searchParams }: Pick<PageProps<"/transacoes/nova">, "searchParams">) {
   const actor = await requireActor();
-  const { accounts, categories, members, defaultIncomeAccountId } = await loadFormOptions(await createClient(), actor.householdId);
+  const db = await createClient();
+  const today = todayInSaoPaulo();
+  const [{ accounts, categories, members, defaultIncomeAccountId }, fromBill] = await Promise.all([
+    loadFormOptions(db, actor.householdId),
+    searchParams.then((params) => billPrefill(db, actor.householdId, params, today)),
+  ]);
   if (accounts.length === 0) {
     return (
       <EmptyState
@@ -59,7 +91,8 @@ async function NewTransaction() {
         members={members}
         currentUserId={actor.userId}
         defaultIncomeAccountId={defaultIncomeAccountId}
-        today={todayInSaoPaulo()}
+        fromBill={fromBill}
+        today={today}
       />
     </Panel>
   );

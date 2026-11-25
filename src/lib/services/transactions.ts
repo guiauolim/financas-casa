@@ -215,7 +215,7 @@ export async function listLedger(db: Db, { householdId }: { householdId: string 
   for (let page = 0; ; page++) {
     const { data, error } = await db
       .from("transactions")
-      .select("id, type, amount_cents, occurred_on, account_id, transfer_account_id, category_id, spent_by, invoice_ref")
+      .select("id, type, amount_cents, occurred_on, account_id, transfer_account_id, category_id, spent_by, invoice_ref, recurring_bill_id")
       .eq("household_id", householdId)
       .order("occurred_on")
       .order("id")
@@ -231,6 +231,7 @@ export async function listLedger(db: Db, { householdId }: { householdId: string 
         categoryId: row.category_id,
         spentBy: row.spent_by,
         invoiceRef: row.invoice_ref,
+        recurringBillId: row.recurring_bill_id,
       });
     }
     if ((data?.length ?? 0) < LEDGER_PAGE) return entries;
@@ -359,8 +360,20 @@ export async function createTransaction(
   { source = "web" }: { source?: TxSource } = {},
 ): Promise<CreatedTransactions> {
   const { categoryHouseholdDefault, cycles } = await assertReferences(db, actor.householdId, input);
+  const recurringBillId = input.type === "expense" ? (input.recurringBillId ?? null) : null;
+  if (recurringBillId) {
+    const { data: bill, error: billError } = await db
+      .from("recurring_bills")
+      .select("id")
+      .eq("household_id", actor.householdId)
+      .eq("id", recurringBillId)
+      .maybeSingle();
+    throwIf(billError);
+    if (!bill) throw new ServiceError("Conta fixa não encontrada.");
+  }
   const base = {
     ...fields(input),
+    recurring_bill_id: recurringBillId,
     spent_by: resolveSpentBy(input, categoryHouseholdDefault, actor.userId),
     household_id: actor.householdId,
     created_by: actor.userId,

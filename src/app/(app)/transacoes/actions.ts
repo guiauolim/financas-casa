@@ -38,7 +38,10 @@ export async function saveTransactionAction(_prev: FormState, formData: FormData
   } catch (error) {
     return serviceErrorState(error, "Não foi possível salvar o lançamento. Tente novamente.");
   }
-  redirect(`/transacoes?mes=${parsed.data.occurredOn.slice(0, 7)}`);
+  // Lançada a partir de uma conta fixa: volta para Orçamentos, onde ela aparece como paga.
+  const fromBill = parsed.data.type === "expense" && parsed.data.recurringBillId && !id;
+  const back = monthSchema.safeParse(formData.get("backMonth")).data ?? parsed.data.occurredOn.slice(0, 7);
+  redirect(fromBill ? `/orcamentos?mes=${back}` : `/transacoes?mes=${parsed.data.occurredOn.slice(0, 7)}`);
 }
 
 // Excluir da tela de edição: apaga de vez e volta para a lista do mês.

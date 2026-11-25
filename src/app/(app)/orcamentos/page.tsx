@@ -1,4 +1,4 @@
-import { CreditCard, Pencil, PiggyBank, Plus, Tags, Trash2, Wallet } from "lucide-react";
+import { CalendarClock, CreditCard, Pencil, PiggyBank, Plus, Tags, Trash2, Wallet } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -15,7 +15,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { WeekBars } from "@/components/week-bars";
 import { requireActor } from "@/lib/auth/session";
 import { projectedCents } from "@/lib/finance/budget";
-import { formatDate, formatDayMonth, todayInSaoPaulo, weekRange } from "@/lib/finance/dates";
+import { formatDate, formatDayMonth, toYearMonth, todayInSaoPaulo, weekRange } from "@/lib/finance/dates";
+import type { MonthPlan } from "@/lib/finance/month-plan";
+import type { BillStatus, RecurringMonth } from "@/lib/finance/recurring";
+import type { RecurringBillRow } from "@/lib/services/recurring-bills";
 import { listAccounts } from "@/lib/services/accounts";
 import { type BudgetWithStatus, getBudgetStatus, type InvoiceBudget } from "@/lib/services/budgets";
 import { createClient } from "@/lib/supabase/server";
@@ -121,7 +124,7 @@ async function Budgets({ searchParams }: Pick<PageProps<"/orcamentos">, "searchP
     listAccounts(db, { householdId: actor.householdId }),
   ]);
   const hasCards = accounts.some((a) => a.kind === "credit_card");
-  const { total, cards, categories, projection, invoices } = report;
+  const { total, cards, categories, projection, invoices, recurring, plan } = report;
   const week = weekRange(today);
 
   return (
@@ -217,6 +220,37 @@ async function Budgets({ searchParams }: Pick<PageProps<"/orcamentos">, "searchP
         ) : null}
       </div>
 
+      <div className="flex flex-wrap gap-4">
+        <Panel
+          title="Contas fixas do mês"
+          description="Aluguel, luz, assinaturas… Nada é lançado sozinho: use “Lançar” quando pagar."
+          className="min-w-[min(100%,320px)] flex-[3]"
+          actions={
+            recurring ? (
+              <Link href="/configuracoes/contas-fixas" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+                Editar
+              </Link>
+            ) : undefined
+          }
+        >
+          {recurring ? (
+            <RecurringList recurring={recurring} month={toYearMonth(month)} />
+          ) : (
+            <InlineEmpty
+              icon={CalendarClock}
+              text="Cadastre as contas que se repetem todo mês. Elas aparecem aqui como previstas e entram no plano do mês."
+              action={
+                <Link href="/configuracoes/contas-fixas/nova" className={buttonVariants()}>
+                  <Plus aria-hidden />
+                  Cadastrar conta fixa
+                </Link>
+              }
+            />
+          )}
+        </Panel>
+        <PlanPanel plan={plan} hasLimit={invoices.length > 0} />
+      </div>
+
       <Panel
         title="Por categoria"
         description="Gasto do mês contra o limite de cada categoria."
@@ -287,6 +321,113 @@ function InvoiceBudgetPanel({ budget }: { budget: InvoiceBudget }) {
           <PacingWeeks pacing={budget.pacing} />
         </div>
       </div>
+    </Panel>
+  );
+}
+
+const BILL_STATUS: Record<BillStatus, { label: string; className: string }> = {
+  late: { label: "Atrasada", className: "bg-danger/10 text-danger" },
+  pending: { label: "Prevista", className: "bg-muted text-muted-foreground" },
+  paid: { label: "Paga", className: "bg-primary-soft text-primary-soft-foreground" },
+};
+
+function RecurringList({ recurring, month }: { recurring: RecurringMonth<RecurringBillRow>; month: string }) {
+  if (!recurring.items.length) {
+    return <p className="text-sm text-muted-foreground">Todas as contas fixas estão pausadas.</p>;
+  }
+  return (
+    <>
+      <dl className="grid grid-cols-3 gap-2 rounded-xl bg-muted/60 p-3 text-[13px]">
+        <div>
+          <dt className="text-muted-foreground">Previsto</dt>
+          <dd><Money cents={recurring.expectedCents} className="font-medium" /></dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Lançado</dt>
+          <dd><Money cents={recurring.paidCents} className="font-medium" /></dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Falta</dt>
+          <dd><Money cents={recurring.pendingCents} className="font-medium" /></dd>
+        </div>
+      </dl>
+      <ul className="flex flex-col divide-y divide-divider">
+        {recurring.items.map((item) => {
+          const status = BILL_STATUS[item.status];
+          return (
+            <li key={item.bill.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+              <CategoryIcon icon={item.bill.category?.icon} className="size-9" />
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <p className="flex items-center gap-2 font-medium">
+                  <span className="truncate">{item.bill.name}</span>
+                  <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[12px] font-medium", status.className)}>
+                    {status.label}
+                  </span>
+                </p>
+                <p className="truncate text-[13px] text-muted-foreground">
+                  {item.status === "paid" && item.paidOn
+                    ? `Lançada em ${formatDayMonth(item.paidOn)}`
+                    : `${item.status === "late" ? "Venceu" : "Vence"} ${formatDayMonth(item.dueDate)}`}{" "}
+                  · {item.bill.account?.name ?? "Conta"}
+                </p>
+              </div>
+              <Money cents={item.status === "paid" ? item.paidCents : item.bill.amountCents} className="text-sm" />
+              {item.status === "paid" ? null : (
+                <Link
+                  href={`/transacoes/nova?conta-fixa=${item.bill.id}&mes=${month}`}
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  aria-label={`Lançar ${item.bill.name}`}
+                >
+                  Lançar
+                </Link>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
+// Quanto deve sobrar para a reserva (caixinha): regra em lib/finance/month-plan.
+function PlanPanel({ plan, hasLimit }: { plan: MonthPlan; hasLimit: boolean }) {
+  const rows: [string, number, string?][] = [
+    ["Receitas", plan.incomeCents],
+    ["Contas fixas", -plan.fixedCents, "Fora do cartão; as não lançadas pelo previsto."],
+    ["Cartões", -plan.cardsCents, hasLimit ? "Limite da fatura (ou o gasto, se passou)." : "O gasto da fatura do mês."],
+    ["Outros gastos", -plan.otherCents, "Pix e débito já lançados, fora das contas fixas."],
+  ];
+  return (
+    <Panel
+      title="Plano do mês"
+      description="Quanto deve sobrar para a reserva."
+      className="min-w-[min(100%,260px)] flex-[2]"
+    >
+      <dl className="flex flex-col gap-2 text-sm">
+        {rows.map(([label, cents, hint]) => (
+          <div key={label} className="flex items-start justify-between gap-3">
+            <dt>
+              {label}
+              {hint ? <span className="block text-[12px] text-muted-foreground">{hint}</span> : null}
+            </dt>
+            <dd>
+              <Money cents={Math.abs(cents)} kind={cents < 0 ? "expense" : cents > 0 ? "income" : undefined} />
+            </dd>
+          </div>
+        ))}
+        <div className="flex items-baseline justify-between gap-3 border-t border-divider pt-2">
+          <dt className="font-medium">{plan.leftoverCents >= 0 ? "Sobra prevista" : "Vai faltar"}</dt>
+          <dd>
+            <Money
+              cents={Math.abs(plan.leftoverCents)}
+              className={cn("text-lg font-semibold", plan.leftoverCents < 0 ? "text-danger" : "text-primary")}
+            />
+          </dd>
+        </div>
+      </dl>
+      {plan.leftoverCents < 0 ? (
+        <p className="text-[13px] text-danger">Neste ritmo, o mês usa a reserva.</p>
+      ) : null}
     </Panel>
   );
 }
