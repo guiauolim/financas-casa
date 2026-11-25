@@ -176,6 +176,29 @@ pessoa (card_holders, mesmo cartão), classificação por comércio com regras a
   "Paga em dd/mm". Sem pagamento automático no vencimento
 - Novo lançamento: receita sugere a Conta Conjunta
 
+## Fase 4.9 — Limite da fatura com ritmo semanal, contas fixas e insights ✅ concluída
+**Entregue** (branch `feat/orcamento-cartao`):
+- Migrations `0012_orcamento_cartao.sql` (orçamento mensal com cartão = "limite da fatura") e
+  `0013_contas_fixas.sql` (`recurring_bills` + `transactions.recurring_bill_id`), só adicionam
+- Limite da fatura: o que falta é dividido pelas semanas do ciclo (`lib/finance/pacing.ts`); o que sobra
+  numa semana passa para as próximas e o que passa sai delas. Parcelas antigas e contas fixas do cartão
+  ainda não lançadas entram como já comprometido. Orçamentos mostra semana a semana; a Visão geral,
+  "Disponível na semana"
+- Contas fixas (Configurações): previstas/atrasadas/pagas no mês em Orçamentos, com "Lançar" (despesa já
+  preenchida e ligada; nada é lançado sozinho). Plano do mês: sobra prevista para a reserva
+- Insights: ritmo da semana, contas fixas vencendo/atrasadas, categoria acima da média de 3 meses,
+  maiores comércios da fatura
+
+## Fase 4.10 — Pluggy (Open Finance)
+```
+Conectar Itaú e Nubank pela Pluggy (uso pessoal: conector MeuPluggy — confirmar custo e termos).
+Sincronizar contas, saldos (inclusive a caixinha da reserva), pix/débitos e faturas do cartão, com
+deduplicação por id externo (como o import_hash). Substitui a importação manual de faturas e define o
+destino da "Conta Conjunta" atual (o fluxo real: salário dele no Itaú paga as contas da casa; o dela
+entra no Nubank; o que sobra vai para a caixinha, que paga a fatura). Credenciais só em env.
+Sincronização por webhook/cron (também mantém o Supabase gratuito ativo).
+```
+
 ---
 
 # Etapa B — WhatsApp

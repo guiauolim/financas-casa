@@ -34,9 +34,9 @@ src/
     (app)/dashboard/         # visão geral: "Todos os meses" (padrão, sem ?mes; até o mês atual) ou um mês
     (app)/transacoes/        # mês (faturas + fora do cartão; month-browser no cliente), dados/ (GET do mês),
                              # nova, [id], importar (faturas do cartão com prévia)
-    (app)/orcamentos/
+    (app)/orcamentos/        # limite da fatura (ritmo semanal), contas fixas do mês, plano do mês, mensal/categoria
     (app)/investimentos/     # lista, novo, [id] (atualizar valor, histórico), importar (B3 com prévia)
-    (app)/configuracoes/     # contas, cartões, categorias, regras de categoria, membros/telefones
+    (app)/configuracoes/     # contas, cartões, contas fixas, categorias, regras de categoria, membros/telefones
     api/whatsapp/webhook/route.ts   # GET (verificação) + POST (mensagens)
     api/cron/weekly-insights/route.ts   # Fase 8
   lib/
@@ -49,11 +49,11 @@ src/
     whatsapp/{send,verify-signature,types}.ts
     agent/{index,tools,prompts,model}.ts # orquestração LLM + tools (model.ts escolhe o provedor)
     services/{households,accounts,categories,transactions,budgets,overview,investments,networth,
-              card-holders,merchant-rules,card-import,card-invoices,month-transactions}.ts # casos de uso: usados
+              card-holders,merchant-rules,card-import,card-invoices,month-transactions,recurring-bills}.ts # casos de uso: usados
                                          # pelas Server Actions do site E pelas tools do bot
     services/errors.ts       # ServiceError (mensagem PT-BR para o usuário)
     finance/{money,dates,ledger,billing,balances,installments,phone,summary,budget,insights,portfolio,networth,
-             spent-by,categorize,spending-view,month-view,payment-account}.ts # regras puras (testáveis)
+             spent-by,categorize,spending-view,month-view,payment-account,pacing,recurring,month-plan}.ts # regras puras (testáveis)
     importers/excel.ts       # helpers de planilha (magic bytes, números/datas BR, leitura) — B3 e faturas
     importers/limits.ts      # MAX_UPLOAD_BYTES (sem dependências: usado também no navegador)
     importers/b3-excel.ts    # Excel de posição da B3 -> ativos normalizados (puro, sem I/O)
@@ -62,7 +62,8 @@ src/
   proxy.ts                   # Next 16: substitui o middleware.ts
 supabase/
   migrations/                # 0001_init … 0005_investimentos, 0006_import_fatura_pessoas, 0007_faturas_pagas,
-                             # 0008_fatura_referencia, 0009_exclusao_definitiva, 0010_remove_deleted_at, 0011_conta_pagamento_fatura
+                             # 0008_fatura_referencia, 0009_exclusao_definitiva, 0010_remove_deleted_at, 0011_conta_pagamento_fatura,
+                             # 0012_orcamento_cartao, 0013_contas_fixas
   pending/                   # (criar quando preciso) migrations que NÃO podem ir no próximo `db push`;
                              # só depois do deploy: mover para migrations/ e dar push
   seed.sql                   # só dev local (`supabase db reset`); nunca vai para o remoto
@@ -98,6 +99,24 @@ docs/ROADMAP.md
   recalculado no servidor; data editável; grava `invoice_ref` da fatura) ou à mão. Receita nova sugere a
   mesma conta.
 - Fatura: compra no melhor dia (`closing_day`) ou depois cai na fatura seguinte; dia 31 em mês curto = último dia.
+
+## Orçamento: limite da fatura e contas fixas
+- Escopos (`budgetScope`): mensal da casa, por categoria, **limite da fatura** (mensal com cartão, sem
+  categoria; conta pela fatura com o nome do mês) e semanal fixo do cartão (legado; segue a data da compra).
+- Ritmo semanal (`lib/finance/pacing.ts`, `cardPacing`): ciclo da fatura em semanas de segunda a domingo
+  cortadas nas bordas; liberado da semana = (limite − comprometido − gasto antes da semana) × dias da
+  semana ÷ dias que faltam no ciclo. Comprometido = lançamentos da fatura com data antes do ciclo (parcelas
+  antigas) + contas fixas do cartão não lançadas. Nada gravado: tudo sai dos lançamentos. Base do bot para
+  "quanto ainda posso gastar essa semana?" (`getBudgetStatus` → `invoices[].pacing`).
+- Contas fixas (`recurring_bills`, `lib/finance/recurring.ts`): paga no mês = lançamento ligado
+  (`recurring_bill_id`) que conta no mês pela regra do sistema; senão prevista ou atrasada (vencimento
+  passou). **Sem lançamento automático**: "Lançar" abre Novo lançamento preenchido (`?conta-fixa=&mes=`).
+  Excluir a conta fixa só desliga os lançamentos; pausar tira do previsto.
+- Plano do mês (`lib/finance/month-plan.ts`): receitas − contas fixas fora do cartão − cartões (limite da
+  fatura, ou o gasto se passou/sem limite) − outros gastos fora do cartão = sobra prevista para a reserva.
+- Insights (`lib/finance/insights.ts`, no máximo 3, mais graves primeiro): ritmo da semana, orçamento do
+  mês, categoria estourada, contas fixas, fatura vencendo, categoria ≥ 20% e ≥ R$ 100 acima da média de
+  3 meses, semana × semana (só sem limite da fatura), maiores comércios da fatura.
 
 ## Tela Transações (o mês manda em tudo)
 - Mês escolhido → uma seção por cartão com ciclo ("Fatura <cartão> · <mês> (dd/mm a dd/mm) · vence dd/mm",
