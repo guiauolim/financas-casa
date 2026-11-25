@@ -13,6 +13,8 @@ export type LedgerEntry = {
   // pagamento (transferência para o cartão), a fatura paga. null/ausente = calcular pela data.
   invoiceRef?: string | null;
   recurringBillId?: string | null; // conta fixa ligada (lib/finance/recurring)
+  description?: string | null; // só para os insights de comércio
+
 };
 
 export type DateRange = { from: string; to: string }; // inclusivo

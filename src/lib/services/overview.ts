@@ -1,14 +1,14 @@
 import "server-only";
 import { type CardInvoices, cardInvoices } from "@/lib/finance/balances";
-import { invoiceLabel } from "@/lib/finance/billing";
+import { invoiceLabel, refForNameMonth } from "@/lib/finance/billing";
 import { projectedCents, weekToDate } from "@/lib/finance/budget";
 import { compareYM, parseYearMonth, toYearMonth, type YearMonth, yearMonthOf } from "@/lib/finance/dates";
-import { buildInsights, type Insight } from "@/lib/finance/insights";
-import { firstMonthOf, type Period } from "@/lib/finance/ledger";
-import { invoiceMonthOf } from "@/lib/finance/spending-view";
+import { buildInsights, categoryTrends, type Insight, type InsightsInput, topMerchants } from "@/lib/finance/insights";
+import { firstMonthOf, type LedgerEntry, type Period } from "@/lib/finance/ledger";
+import { entryInvoiceRef, invoiceMonthOf } from "@/lib/finance/spending-view";
 import { type NetWorthReport, netWorthForMonth } from "@/lib/finance/networth";
 import { expensesByCategory, expensesByPerson, type MonthTotals, monthlySeries, type Summary, summarizeMonth } from "@/lib/finance/summary";
-import { type Account, isCycleCard, listAccounts } from "./accounts";
+import { type Account, type CycleCard, isCycleCard, listAccounts } from "./accounts";
 import { type BudgetStatusReport, type BudgetWithStatus, buildBudgetStatus, listBudgets } from "./budgets";
 import { listRecurringBills } from "./recurring-bills";
 import { listSettledInvoices, toCardAccount } from "./card-invoices";
@@ -165,6 +165,14 @@ export async function getMonthOverview(
       })),
     ),
     week: weekToDate(ledger, today),
+    pacing: pacingInsightInput(budgets),
+    trends: allMonths
+      ? []
+      : categoryTrends(ledger, { month, monthOf, names: new Map(categoryList.map((c) => [c.id, c.name])) }),
+    merchants: isCurrentMonth ? invoiceMerchants(cycleCards, ledger, month) : null,
+    bills: (budgets.recurring?.items ?? [])
+      .filter((i) => i.status !== "paid")
+      .map((i) => ({ name: i.bill.name, dueDate: i.dueDate, amountCents: i.bill.amountCents, late: i.status === "late" })),
   });
 
   return {
@@ -192,4 +200,38 @@ export async function getMonthOverview(
       return { ...p, name: index < 0 ? "Casa" : members[index]!.displayName, memberIndex: index };
     }),
   };
+}
+
+// Semana em andamento do limite da fatura (o primeiro cartão com limite) para os insights.
+function pacingInsightInput(budgets: BudgetStatusReport): InsightsInput["pacing"] {
+  const budget = budgets.invoices.find((b) => b.pacing.current);
+  const current = budget?.pacing.current;
+  if (!budget || !current) return null;
+  const lastWeek = budget.pacing.weeks.filter((w) => w.status === "done").at(-1);
+  return {
+    cardName: budget.account?.name ?? "Cartão",
+    allowanceCents: current.allowanceCents,
+    spentCents: current.spentCents,
+    lastWeekBalanceCents: lastWeek ? lastWeek.balanceCents : null,
+    nextWeeksCents: budget.pacing.nextWeeksCents,
+  };
+}
+
+// Maiores comércios da fatura do mês no cartão que mais gastou nela.
+function invoiceMerchants(
+  cards: readonly CycleCard[],
+  ledger: readonly LedgerEntry[],
+  month: YearMonth,
+): InsightsInput["merchants"] {
+  let best: { card: CycleCard; entries: LedgerEntry[]; total: number } | null = null;
+  for (const card of cards) {
+    if (card.archived) continue;
+    const ref = refForNameMonth(toYearMonth(month), card.invoiceNaming, card);
+    const entries = ledger.filter((e) => e.accountId === card.id && e.type === "expense" && entryInvoiceRef(e, card) === ref);
+    const total = entries.reduce((sum, e) => sum + e.amountCents, 0);
+    if (total > 0 && (!best || total > best.total)) best = { card, entries, total };
+  }
+  if (!best) return null;
+  const items = topMerchants(best.entries);
+  return items.length >= 2 ? { cardName: best.card.name, items } : null;
 }

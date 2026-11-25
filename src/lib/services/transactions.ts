@@ -215,7 +215,7 @@ export async function listLedger(db: Db, { householdId }: { householdId: string 
   for (let page = 0; ; page++) {
     const { data, error } = await db
       .from("transactions")
-      .select("id, type, amount_cents, occurred_on, account_id, transfer_account_id, category_id, spent_by, invoice_ref, recurring_bill_id")
+      .select("id, type, amount_cents, occurred_on, account_id, transfer_account_id, category_id, spent_by, invoice_ref, recurring_bill_id, description")
       .eq("household_id", householdId)
       .order("occurred_on")
       .order("id")
@@ -232,6 +232,7 @@ export async function listLedger(db: Db, { householdId }: { householdId: string 
         spentBy: row.spent_by,
         invoiceRef: row.invoice_ref,
         recurringBillId: row.recurring_bill_id,
+        description: row.description,
       });
     }
     if ((data?.length ?? 0) < LEDGER_PAGE) return entries;
