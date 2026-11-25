@@ -90,7 +90,7 @@ export async function getMonthOverview(
   const monthOf = invoiceMonthOf(
     cycleCards.map((c) => ({ id: c.id, closingDay: c.closingDay, dueDay: c.dueDay, naming: c.invoiceNaming })),
   );
-  const budgets = buildBudgetStatus(budgetList, ledger, { month, today, monthOf });
+  const budgets = buildBudgetStatus(budgetList, ledger, { month, today, monthOf, cards: cycleCards });
   const period: Period = allMonths ? { until: month } : month;
   const firstMonth = firstMonthOf(ledger, month, monthOf);
   const monthsCount = allMonths && firstMonth ? monthsBetween(firstMonth, toYearMonth(month)) : 1;

@@ -8,12 +8,14 @@ import {
   monthProjection,
   weeklyByDay,
 } from "@/lib/finance/budget";
-import type { YearMonth } from "@/lib/finance/dates";
+import { invoiceByRef, invoiceLabel, refForNameMonth } from "@/lib/finance/billing";
+import { toYearMonth, type YearMonth } from "@/lib/finance/dates";
 import type { LedgerEntry } from "@/lib/finance/ledger";
+import { type CardPacing, cardPacing } from "@/lib/finance/pacing";
 import { type BudgetInput, budgetColumns } from "@/lib/validation/budgets";
 import { isUniqueViolation, ServiceError, throwIf } from "./errors";
-import { invoiceMonthOf } from "@/lib/finance/spending-view";
-import { isCycleCard, listAccounts } from "./accounts";
+import { entryInvoiceRef, invoiceMonthOf } from "@/lib/finance/spending-view";
+import { type CycleCard, isCycleCard, listAccounts } from "./accounts";
 import { listLedger } from "./transactions";
 import type { Actor, Db } from "./types";
 
@@ -88,16 +90,19 @@ async function assertReferences(db: Db, householdId: string, input: BudgetInput,
       throw new ServiceError("Esta categoria está arquivada.", "categoryId");
     }
   }
-  if (input.scope === "card") {
+  if (input.scope === "card" || input.scope === "invoice") {
     const { data, error } = await db
       .from("accounts")
-      .select("id, kind, archived")
+      .select("id, kind, archived, closing_day, due_day")
       .eq("household_id", householdId)
       .eq("id", input.accountId)
       .maybeSingle();
     throwIf(error);
     if (!data) throw new ServiceError("Cartão não encontrado.", "accountId");
-    if (data.kind !== "credit_card") throw new ServiceError("O limite semanal é só para cartão de crédito.", "accountId");
+    if (data.kind !== "credit_card") throw new ServiceError("Este limite é só para cartão de crédito.", "accountId");
+    if (input.scope === "invoice" && (data.closing_day === null || data.due_day === null)) {
+      throw new ServiceError("Cadastre o melhor dia de compra e o vencimento do cartão para usar o limite da fatura.", "accountId");
+    }
     if (data.archived && current?.accountId !== data.id) {
       throw new ServiceError("Este cartão está arquivado.", "accountId");
     }
@@ -107,6 +112,7 @@ async function assertReferences(db: Db, householdId: string, input: BudgetInput,
 const DUPLICATE: Record<BudgetInput["scope"], [string, string?]> = {
   total: ["Já existe um orçamento mensal da casa. Edite o existente.", "scope"],
   category: ["Já existe um orçamento para esta categoria.", "categoryId"],
+  invoice: ["Já existe um limite da fatura para este cartão.", "accountId"],
   card: ["Já existe um limite semanal para este cartão.", "accountId"],
 };
 
@@ -158,16 +164,54 @@ export type BudgetStatusReport = {
   total: BudgetWithStatus | null;
   categories: BudgetWithStatus[]; // mais usado (%) primeiro
   cards: (BudgetWithStatus & { days: { date: string; spentCents: number }[] })[];
+  // Limite da fatura com o ritmo semanal (fatura com o nome do mês escolhido).
+  invoices: InvoiceBudget[];
 };
+
+export type InvoiceBudget = BudgetWithStatus & {
+  invoiceRef: string;
+  invoiceLabel: string; // "fatura de novembro de 2026"
+  dueDate: string;
+  pacing: CardPacing;
+};
+
+// Extras comprometidos por cartão/fatura (ex.: contas fixas no cartão ainda não lançadas).
+export type CommittedExtras = (cardId: string, invoiceRef: string) => number;
+
+export function invoicePacing(
+  budget: BudgetWithStatus,
+  card: CycleCard,
+  ledger: readonly LedgerEntry[],
+  { month, today }: { month: YearMonth; today: string },
+  extras?: CommittedExtras,
+): InvoiceBudget {
+  const ref = refForNameMonth(toYearMonth(month), card.invoiceNaming, card);
+  const invoice = invoiceByRef(ref, card);
+  const invoiceEntries = ledger.filter((e) => e.accountId === card.id && entryInvoiceRef(e, card) === ref);
+  return {
+    ...budget,
+    invoiceRef: ref,
+    invoiceLabel: invoiceLabel(invoice, card.invoiceNaming),
+    dueDate: invoice.dueDate,
+    pacing: cardPacing({
+      limitCents: budget.limitCents,
+      cycle: { from: invoice.periodStart, to: invoice.periodEnd },
+      today,
+      invoiceEntries,
+      extraCommittedCents: extras?.(card.id, ref) ?? 0,
+    }),
+  };
+}
 
 // Monta a situação a partir de dados já carregados (a Visão geral reaproveita o ledger).
 export function buildBudgetStatus(
   budgets: readonly Budget[],
   ledger: readonly LedgerEntry[],
-  context: BudgetContext,
+  context: BudgetContext & { cards?: readonly CycleCard[]; extras?: CommittedExtras },
 ): BudgetStatusReport {
-  const { month, today } = context;
+  const { month, today, cards = [], extras } = context;
   const evaluated = budgets.map((b) => ({ ...b, ...evaluateBudget(b, ledger, context) }));
+  const cardById = new Map(cards.map((c) => [c.id, c]));
   return {
     month,
     today,
@@ -180,6 +224,10 @@ export function buildBudgetStatus(
       .filter((b) => b.scope === "card")
       .map((b) => ({ ...b, days: weeklyByDay(ledger, today, b.accountId) }))
       .sort((a, b) => b.percent - a.percent),
+    invoices: evaluated.flatMap((b) => {
+      const card = b.scope === "invoice" && b.accountId ? cardById.get(b.accountId) : undefined;
+      return card ? [invoicePacing(b, card, ledger, { month, today }, extras)] : [];
+    }),
   };
 }
 
@@ -198,8 +246,9 @@ export async function getBudgetStatus(
     listLedger(db, { householdId }),
     listAccounts(db, { householdId, includeArchived: true }),
   ]);
+  const cards = accounts.filter(isCycleCard);
   const monthOf = invoiceMonthOf(
-    accounts.filter(isCycleCard).map((c) => ({ id: c.id, closingDay: c.closingDay, dueDay: c.dueDay, naming: c.invoiceNaming })),
+    cards.map((c) => ({ id: c.id, closingDay: c.closingDay, dueDay: c.dueDay, naming: c.invoiceNaming })),
   );
-  return buildBudgetStatus(budgets, ledger, { month, today, monthOf });
+  return buildBudgetStatus(budgets, ledger, { month, today, monthOf, cards });
 }

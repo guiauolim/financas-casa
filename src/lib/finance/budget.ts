@@ -8,7 +8,8 @@ import { type DateRange, entriesInMonth, inRange, type LedgerEntry, type MonthOf
 //   sem `monthOf`, pela data da compra (cada parcela no mês da própria data).
 //   Transferências (inclusive pagamento de fatura) e receitas nunca contam: o gasto
 //   no cartão já foi contado na compra.
-// - Mensal: total da casa (sem categoria) ou por categoria, no mês.
+// - Mensal: total da casa (sem categoria), por categoria ou do cartão ("limite da fatura": a fatura
+//   com o nome do mês; o ritmo semanal fica em lib/finance/pacing.ts).
 // - Semanal: por cartão, semana de segunda a domingo, sempre pela data da compra.
 // - Status: ok (< 80%), atenção (80% a 100%), estourado (> 100%).
 
@@ -23,11 +24,12 @@ export type BudgetRule = {
   limitCents: number;
 };
 
-export type BudgetScope = "total" | "category" | "card";
+export type BudgetScope = "total" | "category" | "invoice" | "card";
 
-export function budgetScope(budget: Pick<BudgetRule, "period" | "categoryId">): BudgetScope {
+export function budgetScope(budget: Pick<BudgetRule, "period" | "categoryId" | "accountId">): BudgetScope {
   if (budget.period === "weekly") return "card";
-  return budget.categoryId ? "category" : "total";
+  if (budget.categoryId) return "category";
+  return budget.accountId ? "invoice" : "total";
 }
 
 export type BudgetProgress = {
@@ -69,16 +71,21 @@ export function expenseSpent(entries: readonly LedgerEntry[], filter: SpentFilte
   return total;
 }
 
-// Despesas que contam no mês (pelo `monthOf`), opcionalmente só de uma categoria.
+// Despesas que contam no mês (pelo `monthOf`), opcionalmente só de uma categoria ou de uma conta.
 export function monthExpenseSpent(
   entries: readonly LedgerEntry[],
   month: YearMonth,
-  { categoryId, monthOf = purchaseMonthOf }: { categoryId?: string | null; monthOf?: MonthOf } = {},
+  {
+    categoryId,
+    accountId,
+    monthOf = purchaseMonthOf,
+  }: { categoryId?: string | null; accountId?: string | null; monthOf?: MonthOf } = {},
 ): number {
   let total = 0;
   for (const entry of entriesInMonth(entries, month, monthOf)) {
     if (entry.type !== "expense") continue;
     if (categoryId && entry.categoryId !== categoryId) continue;
+    if (accountId && entry.accountId !== accountId) continue;
     total += entry.amountCents;
   }
   return total;
@@ -98,7 +105,11 @@ export function evaluateBudget(budget: BudgetRule, entries: readonly LedgerEntry
   const spent =
     budget.period === "weekly"
       ? expenseSpent(entries, { ...range, accountId: budget.accountId })
-      : monthExpenseSpent(entries, context.month, { categoryId: budget.categoryId, monthOf: context.monthOf });
+      : monthExpenseSpent(entries, context.month, {
+          categoryId: budget.categoryId,
+          accountId: budget.accountId,
+          monthOf: context.monthOf,
+        });
   return { ...budget, scope: budgetScope(budget), range, ...budgetStatus(spent, budget.limitCents) };
 }
 

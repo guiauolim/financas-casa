@@ -27,7 +27,7 @@ async function NewBudget({ searchParams }: Pick<PageProps<"/orcamentos/novo">, "
   const actor = await requireActor();
   const options = await budgetFormOptions(await createClient(), actor.householdId);
   const requested = BUDGET_SCOPES.find((s) => s === tipo);
-  const scope: BudgetScope = requested === "card" && options.cards.length === 0 ? "total" : (requested ?? "total");
+  const scope: BudgetScope = (requested === "card" || requested === "invoice") && options.cards.length === 0 ? "total" : (requested ?? "total");
   const categoryId = typeof categoria === "string" && options.categories.some((c) => c.id === categoria) ? categoria : null;
   return (
     <Panel className="max-w-2xl">

@@ -5,6 +5,7 @@ import { Suspense } from "react";
 import { ConfirmAction } from "@/components/action-button";
 import { BudgetBar, ProjectionNote } from "@/components/budget-bar";
 import { CategoryIcon } from "@/components/category-icon";
+import { PacingHeadline, PacingSummary, PacingWeeks } from "@/components/invoice-pacing";
 import { Money } from "@/components/money";
 import { MonthNav, monthFromParam } from "@/components/month-nav";
 import { PageHeader } from "@/components/page-header";
@@ -14,9 +15,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { WeekBars } from "@/components/week-bars";
 import { requireActor } from "@/lib/auth/session";
 import { projectedCents } from "@/lib/finance/budget";
-import { formatDayMonth, todayInSaoPaulo, weekRange } from "@/lib/finance/dates";
+import { formatDate, formatDayMonth, todayInSaoPaulo, weekRange } from "@/lib/finance/dates";
 import { listAccounts } from "@/lib/services/accounts";
-import { type BudgetWithStatus, getBudgetStatus } from "@/lib/services/budgets";
+import { type BudgetWithStatus, getBudgetStatus, type InvoiceBudget } from "@/lib/services/budgets";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
 import { deleteBudgetAction } from "./actions";
@@ -35,7 +36,7 @@ export default function OrcamentosPage({ searchParams }: PageProps<"/orcamentos"
     <>
       <PageHeader
         title="Orçamentos"
-        description="Limites mensais da casa e por categoria, e semanais por cartão."
+        description="Limite da fatura do cartão com o quanto ainda dá na semana, limites mensais da casa e por categoria."
         actions={newBudgetLink()}
       />
       <Suspense fallback={<BudgetsSkeleton />}>
@@ -120,7 +121,7 @@ async function Budgets({ searchParams }: Pick<PageProps<"/orcamentos">, "searchP
     listAccounts(db, { householdId: actor.householdId }),
   ]);
   const hasCards = accounts.some((a) => a.kind === "credit_card");
-  const { total, cards, categories, projection } = report;
+  const { total, cards, categories, projection, invoices } = report;
   const week = weekRange(today);
 
   return (
@@ -132,6 +133,18 @@ async function Budgets({ searchParams }: Pick<PageProps<"/orcamentos">, "searchP
           semanal segue a data da compra. Transferências, pagamentos de fatura e receitas não entram.
         </p>
       </Panel>
+
+      {invoices.length ? (
+        invoices.map((budget) => <InvoiceBudgetPanel key={budget.id} budget={budget} />)
+      ) : hasCards ? (
+        <Panel title="Limite da fatura" description="Quanto o cartão pode gastar no mês, dividido pelas semanas.">
+          <InlineEmpty
+            icon={CreditCard}
+            text="Defina o limite da fatura: o site divide pelas semanas e mostra quanto ainda dá para gastar. O que sobrar numa semana passa para as próximas (e o que passar, sai delas)."
+            action={newBudgetLink("invoice", "Criar limite da fatura")}
+          />
+        </Panel>
+      ) : null}
 
       <div className="flex flex-wrap gap-4">
         <Panel
@@ -155,6 +168,7 @@ async function Budgets({ searchParams }: Pick<PageProps<"/orcamentos">, "searchP
           )}
         </Panel>
 
+        {cards.length || !invoices.length ? (
         <Panel
           title="Limite semanal por cartão"
           description={`Semana atual, de segunda a domingo (${formatDayMonth(week.from)} a ${formatDayMonth(week.to)}).`}
@@ -180,7 +194,7 @@ async function Budgets({ searchParams }: Pick<PageProps<"/orcamentos">, "searchP
           ) : hasCards ? (
             <InlineEmpty
               icon={CreditCard}
-              text="Um limite por semana ajuda a segurar o cartão do dia a dia. Pagamento de fatura não conta."
+              text="Prefere um valor fixo por semana? Com o limite da fatura, o valor da semana já é calculado sozinho."
               action={newBudgetLink("card", "Criar limite semanal")}
             />
           ) : (
@@ -194,7 +208,13 @@ async function Budgets({ searchParams }: Pick<PageProps<"/orcamentos">, "searchP
               }
             />
           )}
+          {cards.length && invoices.length ? (
+            <p className="text-[13px] text-muted-foreground">
+              Você já tem o limite da fatura, que calcula a semana sozinho. O limite semanal fixo pode ser excluído.
+            </p>
+          ) : null}
         </Panel>
+        ) : null}
       </div>
 
       <Panel
@@ -247,5 +267,26 @@ function CategoryBudgetCard({ budget }: { budget: BudgetWithStatus }) {
       <SpentOfLimit {...budget} />
       <BudgetBar progress={budget} label={`Orçamento ${name}`} />
     </li>
+  );
+}
+
+function InvoiceBudgetPanel({ budget }: { budget: InvoiceBudget }) {
+  const name = budget.account?.name ?? "Cartão";
+  return (
+    <Panel
+      title={`Limite da fatura · ${name}`}
+      description={`${budget.invoiceLabel.replace(/^f/, "F")} · vence ${formatDate(budget.dueDate)}`}
+      actions={<BudgetActions budget={budget} name={`da fatura ${name}`} />}
+    >
+      <div className="flex flex-wrap gap-6">
+        <div className="flex min-w-[min(100%,280px)] flex-[3] flex-col gap-4">
+          <PacingSummary pacing={budget.pacing} label={`Limite da fatura ${name}`} />
+          <PacingHeadline pacing={budget.pacing} />
+        </div>
+        <div className="min-w-[min(100%,260px)] flex-[2]">
+          <PacingWeeks pacing={budget.pacing} />
+        </div>
+      </div>
+    </Panel>
   );
 }

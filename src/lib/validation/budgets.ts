@@ -2,12 +2,13 @@ import { z } from "zod";
 import type { BudgetPeriod, BudgetScope } from "@/lib/finance/budget";
 import { amountCents, uuid } from "./form";
 
-export const BUDGET_SCOPES = ["total", "category", "card"] as const satisfies readonly BudgetScope[];
+export const BUDGET_SCOPES = ["total", "category", "invoice", "card"] as const satisfies readonly BudgetScope[];
 
 export const BUDGET_SCOPE_LABELS: Record<BudgetScope, string> = {
   total: "Mensal da casa",
   category: "Mensal por categoria",
-  card: "Semanal do cartão",
+  invoice: "Limite da fatura",
+  card: "Semanal fixo do cartão",
 };
 
 const limit = { limitCents: amountCents({ label: "o limite" }) };
@@ -17,6 +18,7 @@ export const budgetSchema = z.discriminatedUnion(
   [
     z.object({ scope: z.literal("total"), ...limit }),
     z.object({ scope: z.literal("category"), categoryId: z.uuid({ error: "Escolha a categoria." }), ...limit }),
+    z.object({ scope: z.literal("invoice"), accountId: z.uuid({ error: "Escolha o cartão." }), ...limit }),
     z.object({ scope: z.literal("card"), accountId: z.uuid({ error: "Escolha o cartão." }), ...limit }),
   ],
   { error: "Escolha o tipo de orçamento." },
@@ -35,7 +37,7 @@ export function budgetColumns(input: BudgetInput): {
   return {
     period: input.scope === "card" ? "weekly" : "monthly",
     category_id: input.scope === "category" ? input.categoryId : null,
-    account_id: input.scope === "card" ? input.accountId : null,
+    account_id: input.scope === "card" || input.scope === "invoice" ? input.accountId : null,
     limit_cents: input.limitCents,
   };
 }

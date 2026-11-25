@@ -16,6 +16,7 @@ import Link from "next/link";
 import { BudgetBar, BudgetText, ProjectionNote } from "@/components/budget-bar";
 import { CategoryIcon } from "@/components/category-icon";
 import { EmptyState } from "@/components/empty-state";
+import { PacingHeadline, pacingProgress } from "@/components/invoice-pacing";
 import { Money } from "@/components/money";
 import { SpenderAvatar } from "@/components/member-avatar";
 import { Panel } from "@/components/panel";
@@ -84,6 +85,8 @@ export async function Kpis(props: Props) {
   const all = period === "all";
   const total = budgets.total;
   const card = budgets.cards[0] ?? null; // o de maior uso
+  // Limite da fatura com a semana em andamento (mês atual ou "Todos os meses").
+  const pacing = budgets.invoices.find((b) => b.pacing.current) ?? null;
 
   if (!overview.hasTransactions) {
     return (
@@ -152,7 +155,19 @@ export async function Kpis(props: Props) {
         </Kpi>
       )}
 
-      <Kpi label={card ? `Limite semanal · ${card.account?.name ?? "cartão"}` : "Limite semanal do cartão"}>
+      {pacing ? (
+        <Kpi label={`Disponível na semana · ${pacing.account?.name ?? "cartão"}`}>
+          <PacingHeadline pacing={pacing.pacing} />
+          <BudgetBar progress={pacingProgress(pacing.pacing)} showText={false} label={`Limite da fatura ${pacing.account?.name ?? ""}`} />
+          <p className="text-[12px] text-muted-foreground">
+            Fatura: <Money cents={pacing.pacing.usedCents} /> de <Money cents={pacing.limitCents} />
+          </p>
+          <Link href="/orcamentos" className={textLink}>
+            Ver semanas <ArrowRight className="size-4" aria-hidden />
+          </Link>
+        </Kpi>
+      ) : (
+      <Kpi label={card ? `Limite semanal · ${card.account?.name ?? "cartão"}` : "Limite do cartão"}>
         {card ? (
           <>
             <p className="flex flex-wrap items-baseline gap-x-2">
@@ -168,13 +183,16 @@ export async function Kpis(props: Props) {
           </>
         ) : (
           <>
-            <p className="text-sm text-muted-foreground">Nenhum cartão com limite semanal.</p>
-            <Link href="/orcamentos/novo?tipo=card" className={textLink}>
-              Criar limite semanal <ArrowRight className="size-4" aria-hidden />
+            <p className="text-sm text-muted-foreground">
+              Defina o limite da fatura e veja quanto ainda dá para gastar na semana.
+            </p>
+            <Link href="/orcamentos/novo?tipo=invoice" className={textLink}>
+              Criar limite da fatura <ArrowRight className="size-4" aria-hidden />
             </Link>
           </>
         )}
       </Kpi>
+      )}
 
       {/* Único elemento escuro da tela: contas + investimentos − faturas em aberto. */}
       <section className="flex flex-col gap-2 rounded-[14px] bg-foreground p-5 text-card">

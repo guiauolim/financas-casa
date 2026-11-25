@@ -22,6 +22,12 @@ describe("budgetSchema", () => {
     expect(budgetColumns(parsed)).toEqual({ period: "weekly", category_id: null, account_id: ID, limit_cents: 50050 });
   });
 
+  it("limite da fatura: mensal com o cartão e sem categoria", () => {
+    expect(budgetSchema.safeParse({ scope: "invoice", limitCents: "100" }).success).toBe(false);
+    const parsed = budgetSchema.parse({ scope: "invoice", accountId: ID, categoryId: ID, limitCents: "8.000" });
+    expect(budgetColumns(parsed)).toEqual({ period: "monthly", category_id: null, account_id: ID, limit_cents: 800000 });
+  });
+
   it("limite precisa ser positivo e no formato BR", () => {
     expect(budgetSchema.safeParse({ scope: "total", limitCents: "0" }).success).toBe(false);
     expect(budgetSchema.safeParse({ scope: "total", limitCents: "12.34" }).success).toBe(false);

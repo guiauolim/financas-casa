@@ -23,6 +23,8 @@ type Option = { id: string; name: string };
 const HINTS: Record<BudgetScope, string> = {
   total: "Soma de todas as despesas do mês, em qualquer conta ou cartão.",
   category: "Despesas da categoria no mês, em qualquer conta ou cartão.",
+  invoice:
+    "Compras e parcelas da fatura do mês. O site divide o que falta pelas semanas: o que sobra numa semana passa para as próximas.",
   card: "Compras no cartão de segunda a domingo. Pagamento de fatura não conta.",
 };
 
@@ -50,7 +52,7 @@ export function BudgetForm({
         options={BUDGET_SCOPES.map((s) => ({
           value: s,
           label: BUDGET_SCOPE_LABELS[s],
-          disabled: s === "card" && cards.length === 0,
+          disabled: (s === "card" || s === "invoice") && cards.length === 0,
         }))}
         error={errors.scope}
       />
@@ -75,7 +77,7 @@ export function BudgetForm({
         </SelectField>
       ) : null}
 
-      {scope === "card" ? (
+      {scope === "card" || scope === "invoice" ? (
         <SelectField name="accountId" label="Cartão" defaultValue={budget.accountId ?? ""} error={errors.accountId} required>
           <option value="" disabled>
             Escolha um cartão
@@ -90,7 +92,7 @@ export function BudgetForm({
 
       <AmountField
         name="limitCents"
-        label={scope === "card" ? "Limite por semana (R$)" : "Limite por mês (R$)"}
+        label={scope === "card" ? "Limite por semana (R$)" : scope === "invoice" ? "Limite da fatura por mês (R$)" : "Limite por mês (R$)"}
         defaultValue={budget.limitCents ? formatAmountInput(budget.limitCents) : undefined}
         error={errors.limitCents}
         required
