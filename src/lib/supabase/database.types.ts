@@ -621,6 +621,77 @@ export type Database = {
           },
         ]
       }
+      recurring_bills: {
+        Row: {
+          account_id: string
+          active: boolean
+          amount_cents: number
+          category_id: string
+          created_at: string
+          due_day: number
+          household_id: string
+          id: string
+          name: string
+          spent_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          active?: boolean
+          amount_cents: number
+          category_id: string
+          created_at?: string
+          due_day: number
+          household_id: string
+          id?: string
+          name: string
+          spent_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          active?: boolean
+          amount_cents?: number
+          category_id?: string
+          created_at?: string
+          due_day?: number
+          household_id?: string
+          id?: string
+          name?: string
+          spent_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_bills_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_bills_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_bills_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recurring_bills_spent_by_fkey"
+            columns: ["spent_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       transactions: {
         Row: {
           account_id: string
@@ -638,6 +709,7 @@ export type Database = {
           installment_total: number | null
           invoice_ref: string | null
           occurred_on: string
+          recurring_bill_id: string | null
           source: Database["public"]["Enums"]["tx_source"]
           spent_by: string | null
           transfer_account_id: string | null
@@ -660,6 +732,7 @@ export type Database = {
           installment_total?: number | null
           invoice_ref?: string | null
           occurred_on?: string
+          recurring_bill_id?: string | null
           source?: Database["public"]["Enums"]["tx_source"]
           spent_by?: string | null
           transfer_account_id?: string | null
@@ -682,6 +755,7 @@ export type Database = {
           installment_total?: number | null
           invoice_ref?: string | null
           occurred_on?: string
+          recurring_bill_id?: string | null
           source?: Database["public"]["Enums"]["tx_source"]
           spent_by?: string | null
           transfer_account_id?: string | null
@@ -715,6 +789,13 @@ export type Database = {
             columns: ["household_id"]
             isOneToOne: false
             referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_recurring_bill_id_fkey"
+            columns: ["recurring_bill_id"]
+            isOneToOne: false
+            referencedRelation: "recurring_bills"
             referencedColumns: ["id"]
           },
           {
