@@ -199,6 +199,16 @@ entra no Nubank; o que sobra vai para a caixinha, que paga a fatura). Credenciai
 Sincronização por webhook/cron (também mantém o Supabase gratuito ativo).
 ```
 
+**Decidido:**
+- Investimentos também pela Pluggy (Banco do Brasil e Nubank): cada sincronização grava um snapshot.
+  A importação da B3 sai depois de conferir que os valores batem (o cadastro manual fica para o que não vier).
+- Pagamento de fatura (opção A): o botão "Pagar fatura" continua (o dinheiro sai da conta quando a casa
+  decidir). Quando a Pluggy trouxer o débito do pagamento, ele é **conciliado** com a transferência já
+  lançada (mesma conta/cartão, valor e data próximos) em vez de virar um lançamento novo; débito sem
+  transferência lançada vira o pagamento da fatura.
+- Primeiro passo: protótipo só de leitura (contas, faturas, investimentos) para ver os dados reais antes
+  de mexer no modelo.
+
 ---
 
 # Etapa B — WhatsApp
