@@ -129,7 +129,7 @@ export async function Kpis(props: Props) {
           </p>
         </Kpi>
       ) : (
-        <Kpi label="Gasto x orçamento do mês">
+        <Kpi label={total ? "Gasto x orçamento do mês" : "Gasto do mês"}>
           <p className="flex flex-wrap items-baseline gap-x-2">
             <Money cents={total?.spentCents ?? summary.expenseCents} className={kpiValue} />
             {total ? (
@@ -148,9 +148,7 @@ export async function Kpis(props: Props) {
               {isCurrentMonth ? <ProjectionNote projection={budgets.projection} limitCents={total.limitCents} /> : null}
             </>
           ) : (
-            <Link href="/orcamentos/novo?tipo=total" className={textLink}>
-              Definir orçamento mensal <ArrowRight className="size-4" aria-hidden />
-            </Link>
+            <p className="text-[13px] text-muted-foreground">Despesas do mês, em qualquer conta ou cartão.</p>
           )}
         </Kpi>
       )}

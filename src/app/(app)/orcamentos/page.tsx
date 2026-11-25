@@ -39,7 +39,7 @@ export default function OrcamentosPage({ searchParams }: PageProps<"/orcamentos"
     <>
       <PageHeader
         title="Orçamentos"
-        description="Limite da fatura do cartão com o quanto ainda dá na semana, limites mensais da casa e por categoria."
+        description="Limite da fatura do cartão com o quanto ainda dá na semana e limites por categoria."
         actions={newBudgetLink()}
       />
       <Suspense fallback={<BudgetsSkeleton />}>
@@ -139,71 +139,18 @@ async function Budgets({ searchParams }: Pick<PageProps<"/orcamentos">, "searchP
 
       {invoices.length ? (
         invoices.map((budget) => <InvoiceBudgetPanel key={budget.id} budget={budget} />)
-      ) : hasCards ? (
+      ) : (
         <Panel title="Limite da fatura" description="Quanto o cartão pode gastar no mês, dividido pelas semanas.">
-          <InlineEmpty
-            icon={CreditCard}
-            text="Defina o limite da fatura: o site divide pelas semanas e mostra quanto ainda dá para gastar. O que sobrar numa semana passa para as próximas (e o que passar, sai delas)."
-            action={newBudgetLink("invoice", "Criar limite da fatura")}
-          />
-        </Panel>
-      ) : null}
-
-      <div className="flex flex-wrap gap-4">
-        <Panel
-          title="Limite mensal da casa"
-          description="Todas as despesas do mês."
-          className="min-w-[min(100%,320px)] flex-[3]"
-          actions={total ? <BudgetActions budget={total} name="mensal da casa" /> : undefined}
-        >
-          {total ? (
-            <>
-              <SpentOfLimit {...total} />
-              <BudgetBar progress={total} projectionCents={projectedCents(projection)} label="Limite mensal da casa" />
-              <ProjectionNote projection={projection} limitCents={total.limitCents} />
-            </>
-          ) : (
-            <InlineEmpty
-              icon={Wallet}
-              text="Defina quanto a casa pode gastar no mês. A barra mostra o gasto e onde o mês deve fechar no ritmo atual."
-              action={newBudgetLink("total", "Criar limite mensal")}
-            />
-          )}
-        </Panel>
-
-        {cards.length || !invoices.length ? (
-        <Panel
-          title="Limite semanal por cartão"
-          description={`Semana atual, de segunda a domingo (${formatDayMonth(week.from)} a ${formatDayMonth(week.to)}).`}
-          className="min-w-[min(100%,280px)] flex-[2]"
-        >
-          {cards.length ? (
-            <ul className="flex flex-col divide-y divide-divider">
-              {cards.map((card) => (
-                <li key={card.id} className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0">
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="flex items-center gap-2 font-medium">
-                      <CreditCard className="size-4 text-muted-foreground" strokeWidth={2} aria-hidden />
-                      {card.account?.name ?? "Cartão"}
-                    </p>
-                    <BudgetActions budget={card} name={`semanal ${card.account?.name ?? ""}`.trim()} />
-                  </div>
-                  <SpentOfLimit {...card} />
-                  <BudgetBar progress={card} label={`Limite semanal ${card.account?.name ?? ""}`} />
-                  <WeekBars days={card.days} today={today} />
-                </li>
-              ))}
-            </ul>
-          ) : hasCards ? (
+          {hasCards ? (
             <InlineEmpty
               icon={CreditCard}
-              text="Prefere um valor fixo por semana? Com o limite da fatura, o valor da semana já é calculado sozinho."
-              action={newBudgetLink("card", "Criar limite semanal")}
+              text="Defina o limite da fatura: o site divide pelas semanas e mostra quanto ainda dá para gastar. O que sobrar numa semana passa para as próximas (e o que passar, sai delas)."
+              action={newBudgetLink("invoice", "Criar limite da fatura")}
             />
           ) : (
             <InlineEmpty
               icon={CreditCard}
-              text="Cadastre um cartão de crédito em Configurações para definir um limite semanal."
+              text="Cadastre um cartão de crédito em Configurações para definir o limite da fatura."
               action={
                 <Link href="/configuracoes/contas/nova" className={buttonVariants({ variant: "outline" })}>
                   Cadastrar cartão
@@ -211,14 +158,55 @@ async function Budgets({ searchParams }: Pick<PageProps<"/orcamentos">, "searchP
               }
             />
           )}
-          {cards.length && invoices.length ? (
-            <p className="text-[13px] text-muted-foreground">
-              Você já tem o limite da fatura, que calcula a semana sozinho. O limite semanal fixo pode ser excluído.
-            </p>
-          ) : null}
+        </Panel>
+      )}
+
+      {/* Limites antigos (mensal da casa e semanal fixo): não dá mais para criar, mas os que existem seguem
+          aparecendo para acompanhar, editar ou excluir. */}
+      {total || cards.length ? (
+      <div className="flex flex-wrap gap-4">
+        {total ? (
+        <Panel
+          title="Limite mensal da casa"
+          description="Todas as despesas do mês."
+          className="min-w-[min(100%,320px)] flex-[3]"
+          actions={<BudgetActions budget={total} name="mensal da casa" />}
+        >
+          <SpentOfLimit {...total} />
+          <BudgetBar progress={total} projectionCents={projectedCents(projection)} label="Limite mensal da casa" />
+          <ProjectionNote projection={projection} limitCents={total.limitCents} />
+        </Panel>
+        ) : null}
+
+        {cards.length ? (
+        <Panel
+          title="Limite semanal por cartão"
+          description={`Semana atual, de segunda a domingo (${formatDayMonth(week.from)} a ${formatDayMonth(week.to)}).`}
+          className="min-w-[min(100%,280px)] flex-[2]"
+        >
+          <ul className="flex flex-col divide-y divide-divider">
+            {cards.map((card) => (
+              <li key={card.id} className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="flex items-center gap-2 font-medium">
+                    <CreditCard className="size-4 text-muted-foreground" strokeWidth={2} aria-hidden />
+                    {card.account?.name ?? "Cartão"}
+                  </p>
+                  <BudgetActions budget={card} name={`semanal ${card.account?.name ?? ""}`.trim()} />
+                </div>
+                <SpentOfLimit {...card} />
+                <BudgetBar progress={card} label={`Limite semanal ${card.account?.name ?? ""}`} />
+                <WeekBars days={card.days} today={today} />
+              </li>
+            ))}
+          </ul>
+          <p className="text-[13px] text-muted-foreground">
+            O limite semanal fixo foi substituído pelo limite da fatura, que calcula a semana sozinho. Este pode ser excluído.
+          </p>
         </Panel>
         ) : null}
       </div>
+      ) : null}
 
       <div className="flex flex-wrap gap-4">
         <Panel

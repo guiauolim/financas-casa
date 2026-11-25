@@ -4,6 +4,10 @@ import { amountCents, uuid } from "./form";
 
 export const BUDGET_SCOPES = ["total", "category", "invoice", "card"] as const satisfies readonly BudgetScope[];
 
+// O que dá para criar hoje. "total" (mensal da casa) e "card" (semanal fixo) seguem válidos para os
+// orçamentos que já existem, mas o cartão é um só para a casa: o limite da fatura cobre os dois.
+export const NEW_BUDGET_SCOPES = ["invoice", "category"] as const satisfies readonly BudgetScope[];
+
 export const BUDGET_SCOPE_LABELS: Record<BudgetScope, string> = {
   total: "Mensal da casa",
   category: "Mensal por categoria",

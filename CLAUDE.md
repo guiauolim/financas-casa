@@ -103,6 +103,9 @@ docs/ROADMAP.md
 ## Orçamento: limite da fatura e contas fixas
 - Escopos (`budgetScope`): mensal da casa, por categoria, **limite da fatura** (mensal com cartão, sem
   categoria; conta pela fatura com o nome do mês) e semanal fixo do cartão (legado; segue a data da compra).
+  Só dá para **criar** limite da fatura e por categoria (`NEW_BUDGET_SCOPES`): o cartão é um só para a casa,
+  então o limite da fatura já cobre os dois. Mensal da casa e semanal fixo que já existem seguem aparecendo
+  e editáveis.
 - Ritmo semanal (`lib/finance/pacing.ts`, `cardPacing`): ciclo da fatura em semanas de segunda a domingo
   cortadas nas bordas; liberado da semana = (limite − comprometido − gasto antes da semana) × dias da
   semana ÷ dias que faltam no ciclo. Comprometido = lançamentos da fatura com data antes do ciclo (parcelas

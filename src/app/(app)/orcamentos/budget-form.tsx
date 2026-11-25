@@ -6,7 +6,7 @@ import { AmountField, FormError, Segmented, SelectField } from "@/components/for
 import { Button, buttonVariants } from "@/components/ui/button";
 import type { BudgetScope } from "@/lib/finance/budget";
 import { formatAmountInput } from "@/lib/finance/money";
-import { BUDGET_SCOPE_LABELS, BUDGET_SCOPES } from "@/lib/validation/budgets";
+import { BUDGET_SCOPE_LABELS, NEW_BUDGET_SCOPES } from "@/lib/validation/budgets";
 import type { FormState } from "@/lib/validation/form";
 import { saveBudgetAction } from "./actions";
 
@@ -40,6 +40,10 @@ export function BudgetForm({
   const [state, action, pending] = useActionState(saveBudgetAction, {} as FormState);
   const [scope, setScope] = useState<BudgetScope>(budget.scope);
   const errors = state.fieldErrors ?? {};
+  // Orçamento antigo (mensal da casa / semanal fixo) continua editável no tipo dele.
+  const scopes: BudgetScope[] = (NEW_BUDGET_SCOPES as readonly BudgetScope[]).includes(budget.scope)
+    ? [...NEW_BUDGET_SCOPES]
+    : [budget.scope, ...NEW_BUDGET_SCOPES];
 
   return (
     <form action={action} className="flex flex-col gap-4" noValidate>
@@ -49,7 +53,7 @@ export function BudgetForm({
         legend="Tipo de orçamento"
         value={scope}
         onChange={setScope}
-        options={BUDGET_SCOPES.map((s) => ({
+        options={scopes.map((s) => ({
           value: s,
           label: BUDGET_SCOPE_LABELS[s],
           disabled: (s === "card" || s === "invoice") && cards.length === 0,

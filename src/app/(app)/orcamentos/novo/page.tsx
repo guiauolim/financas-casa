@@ -5,7 +5,7 @@ import { FormSkeleton, Panel } from "@/components/panel";
 import { requireActor } from "@/lib/auth/session";
 import type { BudgetScope } from "@/lib/finance/budget";
 import { createClient } from "@/lib/supabase/server";
-import { BUDGET_SCOPES } from "@/lib/validation/budgets";
+import { NEW_BUDGET_SCOPES } from "@/lib/validation/budgets";
 import { BudgetForm } from "../budget-form";
 import { budgetFormOptions } from "../form-options";
 
@@ -26,8 +26,8 @@ async function NewBudget({ searchParams }: Pick<PageProps<"/orcamentos/novo">, "
   const { tipo, categoria } = await searchParams;
   const actor = await requireActor();
   const options = await budgetFormOptions(await createClient(), actor.householdId);
-  const requested = BUDGET_SCOPES.find((s) => s === tipo);
-  const scope: BudgetScope = (requested === "card" || requested === "invoice") && options.cards.length === 0 ? "total" : (requested ?? "total");
+  const requested = NEW_BUDGET_SCOPES.find((s) => s === tipo);
+  const scope: BudgetScope = options.cards.length === 0 ? "category" : (requested ?? "invoice");
   const categoryId = typeof categoria === "string" && options.categories.some((c) => c.id === categoria) ? categoria : null;
   return (
     <Panel className="max-w-2xl">
