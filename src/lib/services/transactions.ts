@@ -11,7 +11,7 @@ import type { Scope, TransactionInput } from "@/lib/validation/transactions";
 import { ServiceError, throwIf } from "./errors";
 import type { Actor, Db } from "./types";
 
-export type TxSource = "whatsapp" | "web" | "import";
+export type TxSource = "whatsapp" | "web" | "import" | "pluggy";
 
 export type Transaction = {
   id: string;

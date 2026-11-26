@@ -36,8 +36,10 @@ src/
                              # nova, [id], importar (faturas do cartão com prévia)
     (app)/orcamentos/        # limite da fatura (ritmo semanal), contas fixas do mês, plano do mês, mensal/categoria
     (app)/investimentos/     # lista, novo, [id] (atualizar valor, histórico), importar (B3 com prévia)
-    (app)/configuracoes/     # contas, cartões, contas fixas, categorias, regras de categoria, membros/telefones
+    (app)/configuracoes/     # contas, cartões, contas fixas, categorias, regras de categoria, membros/telefones,
+                             # pluggy (ligar cada conta/cartão/investimento do banco a um papel)
     api/whatsapp/webhook/route.ts   # GET (verificação) + POST (mensagens)
+    api/cron/pluggy-sync/route.ts       # sync diário com a Pluggy (CRON_SECRET)
     api/cron/weekly-insights/route.ts   # Fase 8
   lib/
     supabase/{server,client,admin}.ts   # admin = service role, SÓ server-side
@@ -47,13 +49,14 @@ src/
     validation/*.ts          # schemas Zod dos formulários (form.ts: FormState, valor BR, apelidos)
     categories/icon-names.ts # ícones lucide permitidos nas categorias
     whatsapp/{send,verify-signature,types}.ts
+    pluggy/client.ts         # API da Pluggy (só leitura, respostas validadas com Zod), server-only
     agent/{index,tools,prompts,model}.ts # orquestração LLM + tools (model.ts escolhe o provedor)
     services/{households,accounts,categories,transactions,budgets,overview,investments,networth,
-              card-holders,merchant-rules,card-import,card-invoices,month-transactions,recurring-bills}.ts # casos de uso: usados
+              card-holders,merchant-rules,card-import,card-invoices,month-transactions,recurring-bills,pluggy}.ts # casos de uso: usados
                                          # pelas Server Actions do site E pelas tools do bot
     services/errors.ts       # ServiceError (mensagem PT-BR para o usuário)
     finance/{money,dates,ledger,billing,balances,installments,phone,summary,budget,insights,portfolio,networth,
-             spent-by,categorize,spending-view,month-view,payment-account,pacing,recurring,month-plan}.ts # regras puras (testáveis)
+             spent-by,categorize,spending-view,month-view,payment-account,pacing,recurring,month-plan,pluggy-links}.ts # regras puras (testáveis)
     importers/excel.ts       # helpers de planilha (magic bytes, números/datas BR, leitura) — B3 e faturas
     importers/limits.ts      # MAX_UPLOAD_BYTES (sem dependências: usado também no navegador)
     importers/b3-excel.ts    # Excel de posição da B3 -> ativos normalizados (puro, sem I/O)
@@ -63,7 +66,7 @@ src/
 supabase/
   migrations/                # 0001_init … 0005_investimentos, 0006_import_fatura_pessoas, 0007_faturas_pagas,
                              # 0008_fatura_referencia, 0009_exclusao_definitiva, 0010_remove_deleted_at, 0011_conta_pagamento_fatura,
-                             # 0012_orcamento_cartao, 0013_contas_fixas
+                             # 0012_orcamento_cartao, 0013_contas_fixas, 0014_pluggy
   pending/                   # (criar quando preciso) migrations que NÃO podem ir no próximo `db push`;
                              # só depois do deploy: mover para migrations/ e dar push
   seed.sql                   # só dev local (`supabase db reset`); nunca vai para o remoto
@@ -120,6 +123,40 @@ docs/ROADMAP.md
 - Insights (`lib/finance/insights.ts`, no máximo 3, mais graves primeiro): ritmo da semana, orçamento do
   mês, categoria estourada, contas fixas, fatura vencendo, categoria ≥ 20% e ≥ R$ 100 acima da média de
   3 meses, semana × semana (só sem limite da fatura), maiores comércios da fatura.
+
+## Pluggy (Open Finance, MeuPluggy) — Fase 4.10
+- MeuPluggy: uso pessoal, gratuito (até 5 conexões), atualiza a cada 24h, consentimento de 1 ano.
+- **As credenciais são de UMA casa**: `PLUGGY_HOUSEHOLD_ID`. O cadastro no site é aberto, então toda
+  entrada (tela, actions, cron) usa `pluggyConfigFor(householdId)`/`pluggyCronConfig()` de
+  `lib/pluggy/client.ts`; outra casa recebe null e não vê nem sincroniza os bancos.
+  Itens em `PLUGGY_ITEM_IDS` (o GET /items não funciona no MeuPluggy). Só `/v2/transactions` (cursor).
+- `pluggy_links`: cada origem (conta corrente, cartão, investimentos de um login) tem um papel:
+  `vault` (o saldo soma na conta), `reserve` (investimentos ATIVOS somam na conta: a caixinha),
+  `card`, `investments` (módulo Investimentos) ou `ignore`. **Conta Conjunta = correntes (Itaú e os
+  dois Nubank) + caixinha (CDBs)**; movimento entre elas é interno do cofre (não vira lançamento).
+  Sugestão inicial e validação em `lib/finance/pluggy-links.ts`.
+- Corte: lançamentos da Pluggy só a partir de `PLUGGY_START_DATE` (01/11/2026); antes, o que já existia.
+- `external_transactions` = dedup da sincronização (como o `import_hash`); lançamento excluído pelo
+  usuário não volta. Fatura: a do banco (`billId` → vencimento → `invoiceByDueMonth`) quando fechada;
+  aberta = estimativa pelo melhor dia, corrigida quando o banco fecha.
+- Sincronização (`services/pluggy-sync.ts` → plano puro `importers/pluggy/plan.ts`): corrente do cofre:
+  saída = despesa, entrada = receita (salário/rendimento reconhecidos); aplicação/resgate, pix entre CPFs
+  da casa (CPFs só em memória) e débito de fatura → absorvidos. Cartão: compra/encargo = despesa,
+  estorno = receita, pagamento = transferência conta pagadora → cartão, **conciliada** com um "Pagar
+  fatura" já lançado (mesmo cartão e valor, ±5 dias). Id do lançamento = UUID derivado do id da Pluggy
+  (repetir não duplica). Re-sync atualiza valor/data/fatura só de `source='pluggy'`, nunca categoria/pessoa.
+  PENDING que some da Pluggy é apagado.
+- Saldo: conta com origens ligadas usa o saldo do banco (`accounts.external_balance_*`, soma das origens;
+  `accountBalance` volta pelos lançamentos para datas anteriores). Detalhe por origem em
+  `pluggy_links.last_balance_cents`. Investimentos (Tesouro): um ativo por título (nome + vencimento),
+  `source='pluggy'`, snapshot a cada sync; valor travado como na B3.
+- Virada (`services/pluggy-cutover.ts`): antes da 1ª sync, os lançamentos não-Pluggy das contas ligadas
+  a partir do corte são substituídos (confirmação "Não dá para desfazer"), menos os pagamentos de fatura
+  (ficam para conciliar). Enquanto houver algo a substituir, a sync recusa (evita contar em dobro).
+- Agenda: botão em Configurações → Bancos e Vercel Cron diário `/api/cron/pluggy-sync` (`vercel.json`,
+  `Authorization: Bearer ${CRON_SECRET}`, cliente admin). Melhor dia sugerido por `suggestClosingDay`.
+- Cursor da `/v2/transactions`: `next` é o resto do caminho (`/v2/transactions{next}`), não o valor do cursor.
+- Dados reais: nada de log de conteúdo; testes e fixtures só com dados inventados.
 
 ## Tela Transações (o mês manda em tudo)
 - Mês escolhido → uma seção por cartão com ciclo ("Fatura <cartão> · <mês> (dd/mm a dd/mm) · vence dd/mm",
@@ -249,7 +286,7 @@ docs/ROADMAP.md
 - RLS ligado em TODAS as tabelas; acesso por `is_household_member(household_id)`.
 - O proxy **não** roda em `/api/*`: cada rota de API se autentica sozinha (webhook pela assinatura
   `X-Hub-Signature-256`; crons por `Authorization: Bearer ${CRON_SECRET}`).
-- Rotas `/api/cron/*` (a partir da Fase 8) exigem `Authorization: Bearer ${CRON_SECRET}`.
+- Rotas `/api/cron/*` (hoje: pluggy-sync) exigem `Authorization: Bearer ${CRON_SECRET}`.
 - Não logar conteúdo de mensagens nem valores em logs da Vercel além do necessário.
 
 ## Variáveis de ambiente
@@ -268,8 +305,13 @@ WHATSAPP_PHONE_NUMBER_ID=
 WHATSAPP_VERIFY_TOKEN=
 WHATSAPP_APP_SECRET=
 WHATSAPP_WEEKLY_TEMPLATE=
-# --- a partir da Fase 8 (insights agendados) ---
+# --- cron (sync da Pluggy; insights agendados na Fase 8) ---
 CRON_SECRET=
+# --- Pluggy (Fase 4.10) ---
+PLUGGY_CLIENT_ID=
+PLUGGY_CLIENT_SECRET=
+PLUGGY_ITEM_IDS=            # itens do MeuPluggy, separados por vírgula
+PLUGGY_HOUSEHOLD_ID=        # a única casa que pode usar essas credenciais
 ```
 `BRAPI_TOKEN` não é usado: cotação automática ficou em "Ideias para depois" no ROADMAP.
 

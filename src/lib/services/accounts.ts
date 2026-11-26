@@ -1,5 +1,6 @@
 import "server-only";
 import type { CardCycle, InvoiceNaming } from "@/lib/finance/billing";
+import { todayInSaoPaulo } from "@/lib/finance/dates";
 import type { AccountInput, AccountKind } from "@/lib/validation/accounts";
 import { ServiceError, throwIf } from "./errors";
 import type { Actor, Db } from "./types";
@@ -19,10 +20,13 @@ export type Account = {
   archived: boolean;
   // Cartão: conta que paga a fatura (null = a padrão, ver lib/finance/payment-account).
   paymentAccountId: string | null;
+  // Saldo informado pelo banco (Pluggy); null = saldo pelos lançamentos.
+  externalBalanceCents: number | null;
+  externalBalanceOn: string | null; // dia (America/Sao_Paulo) do saldo do banco
 };
 
 const COLUMNS =
-  "id, name, kind, owner_user_id, closing_day, due_day, invoice_naming, credit_limit_cents, opening_balance_cents, opening_balance_date, aliases, archived, payment_account_id";
+  "id, name, kind, owner_user_id, closing_day, due_day, invoice_naming, credit_limit_cents, opening_balance_cents, opening_balance_date, aliases, archived, payment_account_id, external_balance_cents, external_balance_at";
 
 type Row = {
   id: string;
@@ -38,6 +42,8 @@ type Row = {
   aliases: string[];
   archived: boolean;
   payment_account_id: string | null;
+  external_balance_cents: number | null;
+  external_balance_at: string | null;
 };
 
 const toAccount = (row: Row): Account => ({
@@ -54,6 +60,8 @@ const toAccount = (row: Row): Account => ({
   aliases: row.aliases,
   archived: row.archived,
   paymentAccountId: row.payment_account_id,
+  externalBalanceCents: row.external_balance_cents,
+  externalBalanceOn: row.external_balance_at ? todayInSaoPaulo(new Date(row.external_balance_at)) : null,
 });
 
 const KIND_ORDER: AccountKind[] = ["checking", "credit_card", "savings", "meal_voucher", "cash"];

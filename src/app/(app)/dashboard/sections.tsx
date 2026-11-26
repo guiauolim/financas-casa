@@ -33,7 +33,7 @@ import { type InvoiceNaming, invoiceNameMonth } from "@/lib/finance/billing";
 import { TransactionRows } from "../transacoes/transaction-rows";
 import { IncomeExpenseChart } from "./income-expense-chart";
 import { PeriodPicker } from "./period-picker";
-import { loadOverview, loadRecent, mesParam } from "./data";
+import { loadIdleMoney, loadOverview, loadRecent, mesParam } from "./data";
 
 type Props = { searchParams: PageProps<"/dashboard">["searchParams"] };
 
@@ -80,7 +80,7 @@ const kpiValue = "text-2xl font-semibold tracking-tight";
 
 export async function Kpis(props: Props) {
   const mes = await mesOf(props);
-  const overview = await loadOverview(mes);
+  const [overview, idleCents] = await Promise.all([loadOverview(mes), loadIdleMoney(mes)]);
   const { summary, budgets, netWorth, isCurrentMonth, month, period, firstMonth, monthsCount } = overview;
   const all = period === "all";
   const total = budgets.total;
@@ -106,7 +106,7 @@ export async function Kpis(props: Props) {
 
   return (
     <div className="grid grid-cols-[repeat(auto-fit,minmax(230px,1fr))] gap-4">
-      <Kpi label={all ? "Saldo acumulado" : "Saldo do mês"}>
+      <Kpi label={all ? "Sobra acumulada" : "Sobra do mês"}>
         <Money cents={summary.balanceCents} className={kpiValue} />
         <p className="flex flex-wrap gap-x-3 text-[13px] text-muted-foreground">
           <span>
@@ -224,6 +224,12 @@ export async function Kpis(props: Props) {
             {formatBRL(Math.abs(netWorth.invoicesCents))}
           </dd>
         </dl>
+        {idleCents != null && idleCents >= 10000 ? (
+          <p className="text-[13px] text-card/75">
+            <span className="font-mono text-card tabular-nums">{formatBRL(idleCents)}</span> parado nas contas correntes:
+            dá para passar para a caixinha.
+          </p>
+        ) : null}
         <Link
           href="/investimentos"
           className="inline-flex min-h-11 items-center gap-1 self-start rounded text-sm font-medium text-card underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-card/50 focus-visible:outline-none"

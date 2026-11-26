@@ -258,3 +258,27 @@ describe("ledgerFromInvoiceTotals", () => {
     expect(fromTotals.open.ref).toBe(full.open.ref);
   });
 });
+
+describe("accountBalance com saldo do banco", () => {
+  const entries = [
+    { type: "expense" as const, amountCents: 1000, occurredOn: "2026-11-20", accountId: "a", transferAccountId: null, categoryId: null },
+    { type: "income" as const, amountCents: 300, occurredOn: "2026-11-24", accountId: "a", transferAccountId: null, categoryId: null },
+  ];
+  const account = {
+    id: "a",
+    openingBalanceCents: 999_999, // ignorado quando há saldo do banco
+    openingBalanceDate: "2026-10-01",
+    externalBalanceCents: 50_000,
+    externalBalanceOn: "2026-11-25",
+  };
+
+  it("hoje (e depois do dia do banco) é o saldo do banco", () => {
+    expect(accountBalance(account, entries)).toBe(50_000);
+    expect(accountBalance(account, entries, "2026-11-30")).toBe(50_000);
+  });
+
+  it("antes do dia do banco, volta pelos lançamentos do meio", () => {
+    expect(accountBalance(account, entries, "2026-11-22")).toBe(50_000 - 300);
+    expect(accountBalance(account, entries, "2026-11-19")).toBe(50_000 - 300 + 1000);
+  });
+});

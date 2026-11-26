@@ -11,6 +11,7 @@ import {
   applyB3Import,
   type B3Preview,
   createInvestment,
+  deleteInvestmentsNotFromBank,
   previewB3Import,
   setInvestmentArchived,
   updateInvestment,
@@ -40,7 +41,7 @@ export async function saveInvestmentAction(_prev: FormState, formData: FormData)
     if (typeof id === "string" && id) {
       const investmentId = z.uuid().parse(id);
       // Ativo da B3 só edita nome, classe e apelidos (o serviço confere a origem de novo).
-      const schema = formData.get("source") === "b3" ? b3InvestmentSchema : investmentSchema;
+      const schema = formData.get("source") === "b3" || formData.get("source") === "pluggy" ? b3InvestmentSchema : investmentSchema;
       const parsed = schema.safeParse(values);
       if (!parsed.success) return invalidState(parsed.error);
       await updateInvestment(db, actor, investmentId, parsed.data);
@@ -86,6 +87,17 @@ export async function setInvestmentArchivedAction(formData: FormData): Promise<A
   }
   refresh();
   return { success: archived ? "Investimento arquivado." : "Investimento reativado." };
+}
+
+export async function deleteInvestmentsNotFromBankAction(): Promise<ActionResult> {
+  const actor = await requireActor();
+  try {
+    const deleted = await deleteInvestmentsNotFromBank(await createClient(), actor);
+    refresh();
+    return { success: `${deleted} investimentos excluídos.` };
+  } catch (error) {
+    return serviceErrorState(error, "Não foi possível excluir os investimentos.");
+  }
 }
 
 // ───────────────────────── Importação da B3 ─────────────────────────
