@@ -96,15 +96,16 @@ export async function listMembers(db: Db, { householdId }: { householdId: string
   }));
 }
 
+// Cada pessoa edita só os próprios dados (a RLS da 0015 também só deixa atualizar a própria linha).
 export async function updateMember(
   db: Db,
-  { householdId, memberUserId, input }: { householdId: string; memberUserId: string; input: MemberInput },
+  { householdId, userId, input }: { householdId: string; userId: string; input: MemberInput },
 ): Promise<void> {
   const { data, error } = await db
     .from("profiles")
     .update({ display_name: input.displayName, phone_e164: input.phone })
     .eq("household_id", householdId)
-    .eq("user_id", memberUserId)
+    .eq("user_id", userId)
     .select("user_id");
   if (isUniqueViolation(error)) throw new ServiceError("Este telefone já está cadastrado para outra pessoa.", "phone");
   throwIf(error);

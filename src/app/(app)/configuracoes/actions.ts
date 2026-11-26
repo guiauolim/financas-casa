@@ -166,16 +166,15 @@ export async function deleteRecurringBillAction(formData: FormData): Promise<Act
 // ───────────── Membros e convites ─────────────
 
 export async function updateMemberAction(_prev: FormState, formData: FormData): Promise<FormState> {
+  // Sempre os próprios dados: o id vem da sessão, nunca do formulário.
   const actor = await requireActor();
-  const memberUserId = z.uuid().safeParse(formData.get("userId"));
-  if (!memberUserId.success) return { error: "Pedido inválido." };
   const parsed = memberSchema.safeParse(formValues(formData, ["displayName", "phone"]));
   if (!parsed.success) return invalidState(parsed.error);
 
   try {
     await updateMember(await createClient(), {
       householdId: actor.householdId,
-      memberUserId: memberUserId.data,
+      userId: actor.userId,
       input: parsed.data,
     });
   } catch (error) {
