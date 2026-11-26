@@ -6,7 +6,7 @@ import type { ActionResult } from "@/components/action-button";
 import { serviceErrorState } from "@/lib/actions";
 import { requireActor } from "@/lib/auth/session";
 import { ROLES_BY_KIND } from "@/lib/finance/pluggy-links";
-import { createPluggyClient, pluggyConfig } from "@/lib/pluggy/client";
+import { createPluggyClient, pluggyConfigFor } from "@/lib/pluggy/client";
 import { discoverPluggySources, type LinkInput, savePluggyLinks } from "@/lib/services/pluggy";
 import { applyCutover } from "@/lib/services/pluggy-cutover";
 import { syncPluggy } from "@/lib/services/pluggy-sync";
@@ -23,7 +23,7 @@ const optionalUuid = z
 // que a Pluggy devolve agora (o formulário não decide o que existe).
 export async function savePluggyLinksAction(_prev: FormState, formData: FormData): Promise<FormState> {
   const actor = await requireActor();
-  const config = pluggyConfig();
+  const config = pluggyConfigFor(actor.householdId);
   if (!config) return { error: "A Pluggy não está configurada." };
 
   try {
@@ -67,7 +67,7 @@ export async function pluggyCutoverAction(): Promise<ActionResult> {
 
 export async function syncPluggyAction(): Promise<ActionResult> {
   const actor = await requireActor();
-  const config = pluggyConfig();
+  const config = pluggyConfigFor(actor.householdId);
   if (!config) return { error: "A Pluggy não está configurada." };
   try {
     const result = await syncPluggy(await createClient(), createPluggyClient(config), {

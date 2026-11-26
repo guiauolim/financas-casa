@@ -7,19 +7,31 @@ import { z } from "zod";
 
 const BASE_URL = "https://api.pluggy.ai";
 
-export type PluggyConfig = { clientId: string; clientSecret: string; itemIds: string[] };
+export type PluggyConfig = { clientId: string; clientSecret: string; itemIds: string[]; householdId: string };
 
-// null = Pluggy não configurada (a tela explica o que falta).
-export function pluggyConfig(): PluggyConfig | null {
+// As credenciais do MeuPluggy são de UMA casa (os bancos de quem as criou). O cadastro no site é
+// aberto, então a Pluggy fica presa à casa de PLUGGY_HOUSEHOLD_ID: qualquer outra casa recebe null
+// e não vê nem sincroniza nada.
+function readConfig(): PluggyConfig | null {
   const clientId = process.env.PLUGGY_CLIENT_ID?.trim();
   const clientSecret = process.env.PLUGGY_CLIENT_SECRET?.trim();
+  const householdId = process.env.PLUGGY_HOUSEHOLD_ID?.trim();
   const itemIds = (process.env.PLUGGY_ITEM_IDS ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  if (!clientId || !clientSecret || itemIds.length === 0) return null;
-  return { clientId, clientSecret, itemIds };
+  if (!clientId || !clientSecret || !householdId || itemIds.length === 0) return null;
+  return { clientId, clientSecret, itemIds, householdId };
 }
+
+// Configuração para esta casa, ou null (não configurada ou de outra casa).
+export function pluggyConfigFor(householdId: string): PluggyConfig | null {
+  const config = readConfig();
+  return config && config.householdId === householdId ? config : null;
+}
+
+// Só para o cron: a casa vem da própria configuração.
+export const pluggyCronConfig = readConfig;
 
 export class PluggyError extends Error {
   constructor(

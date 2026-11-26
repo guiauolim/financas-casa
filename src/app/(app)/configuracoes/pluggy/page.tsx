@@ -8,7 +8,7 @@ import { ListSkeleton, Panel } from "@/components/panel";
 import { requireActor } from "@/lib/auth/session";
 import { formatDate, todayInSaoPaulo } from "@/lib/finance/dates";
 import { PLUGGY_START_DATE, suggestLink } from "@/lib/finance/pluggy-links";
-import { createPluggyClient, PluggyError, pluggyConfig } from "@/lib/pluggy/client";
+import { createPluggyClient, PluggyError, pluggyConfigFor } from "@/lib/pluggy/client";
 import { listAccounts } from "@/lib/services/accounts";
 import { listMembers } from "@/lib/services/households";
 import { discoverPluggySources, listPluggyLinks, type PluggyLink } from "@/lib/services/pluggy";
@@ -29,13 +29,13 @@ export default function PluggyPage() {
 
 async function PluggySettings() {
   const actor = await requireActor();
-  const config = pluggyConfig();
+  const config = pluggyConfigFor(actor.householdId);
   if (!config) {
     return (
       <EmptyState
         icon={Landmark}
-        title="Pluggy não configurada"
-        description="Defina PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET e PLUGGY_ITEM_IDS (os itens do MeuPluggy) nas variáveis de ambiente."
+        title="Pluggy não configurada para esta casa"
+        description={`Defina PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET, PLUGGY_ITEM_IDS (os itens do MeuPluggy) e PLUGGY_HOUSEHOLD_ID=${actor.householdId} (esta casa) nas variáveis de ambiente.`}
       />
     );
   }

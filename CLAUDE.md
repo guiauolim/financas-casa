@@ -126,6 +126,9 @@ docs/ROADMAP.md
 
 ## Pluggy (Open Finance, MeuPluggy) — Fase 4.10
 - MeuPluggy: uso pessoal, gratuito (até 5 conexões), atualiza a cada 24h, consentimento de 1 ano.
+- **As credenciais são de UMA casa**: `PLUGGY_HOUSEHOLD_ID`. O cadastro no site é aberto, então toda
+  entrada (tela, actions, cron) usa `pluggyConfigFor(householdId)`/`pluggyCronConfig()` de
+  `lib/pluggy/client.ts`; outra casa recebe null e não vê nem sincroniza os bancos.
   Itens em `PLUGGY_ITEM_IDS` (o GET /items não funciona no MeuPluggy). Só `/v2/transactions` (cursor).
 - `pluggy_links`: cada origem (conta corrente, cartão, investimentos de um login) tem um papel:
   `vault` (o saldo soma na conta), `reserve` (investimentos ATIVOS somam na conta: a caixinha),
@@ -308,6 +311,7 @@ CRON_SECRET=
 PLUGGY_CLIENT_ID=
 PLUGGY_CLIENT_SECRET=
 PLUGGY_ITEM_IDS=            # itens do MeuPluggy, separados por vírgula
+PLUGGY_HOUSEHOLD_ID=        # a única casa que pode usar essas credenciais
 ```
 `BRAPI_TOKEN` não é usado: cotação automática ficou em "Ideias para depois" no ROADMAP.
 

@@ -210,10 +210,10 @@ Sincronização por webhook/cron (também mantém o Supabase gratuito ativo).
   de mexer no modelo.
 
 **Andamento:**
-- [x] Teste só de leitura (`scripts/pluggy-probe.mjs`): Itaú (conta + cartão), Nubank Guilherme (conta,
-      Tesouro), Nubank Mariana (conta, cartão gold, caixinha = CDBs). BB fica para depois.
+- [x] Teste só de leitura (`scripts/pluggy-probe.mjs`): contas correntes, cartões, Tesouro e a caixinha
+      (CDBs) chegam pela Pluggy. BB fica para depois.
 - [x] Etapa 1 — base: migration `0014_pluggy.sql`, `lib/pluggy/client.ts`, Configurações → Bancos (Pluggy)
-      para ligar cada origem (Conta Conjunta = correntes + caixinha; gold = cartão; Tesouro = Investimentos)
+      para ligar cada origem (Conta Conjunta = correntes + caixinha; cartões; Tesouro = Investimentos)
 - [x] Etapa 2 — sincronização (lançamentos desde 01/11, faturas pelo banco, conciliação do pagamento,
       saldos do banco, Tesouro em Investimentos), botão + cron diário, melhor dia sugerido, "Sobra do mês"
       e aviso de dinheiro parado fora da caixinha
