@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { isPublicPath } from "@/lib/auth/paths";
 import { publicEnv } from "@/lib/env";
+import { sessionCookieOptions } from "./cookie-options";
 import type { Database } from "./database.types";
 
 // Renova a sessão (cookies) e barra quem não está logado.
@@ -10,6 +11,7 @@ export async function updateSession(request: NextRequest) {
   const env = publicEnv();
 
   const supabase = createServerClient<Database>(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    cookieOptions: sessionCookieOptions(),
     cookies: {
       getAll() {
         return request.cookies.getAll();
