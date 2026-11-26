@@ -209,6 +209,15 @@ Sincronização por webhook/cron (também mantém o Supabase gratuito ativo).
 - Primeiro passo: protótipo só de leitura (contas, faturas, investimentos) para ver os dados reais antes
   de mexer no modelo.
 
+**Andamento:**
+- [x] Teste só de leitura (`scripts/pluggy-probe.mjs`): Itaú (conta + cartão), Nubank Guilherme (conta,
+      Tesouro), Nubank Mariana (conta, cartão gold, caixinha = CDBs). BB fica para depois.
+- [x] Etapa 1 — base: migration `0014_pluggy.sql`, `lib/pluggy/client.ts`, Configurações → Bancos (Pluggy)
+      para ligar cada origem (Conta Conjunta = correntes + caixinha; gold = cartão; Tesouro = Investimentos)
+- [ ] Etapa 2 — sincronização (lançamentos desde 01/11, faturas pelo banco, conciliação do pagamento,
+      saldos, investimentos), botão + cron diário
+- [ ] Etapa 3 — virada: diagnóstico do que sai de novembro em diante, OK do usuário, primeira sync
+
 ---
 
 # Etapa B — WhatsApp

@@ -22,6 +22,8 @@ export type Database = {
           created_at: string
           credit_limit_cents: number | null
           due_day: number | null
+          external_balance_at: string | null
+          external_balance_cents: number | null
           household_id: string
           id: string
           invoice_naming: string
@@ -39,6 +41,8 @@ export type Database = {
           created_at?: string
           credit_limit_cents?: number | null
           due_day?: number | null
+          external_balance_at?: string | null
+          external_balance_cents?: number | null
           household_id: string
           id?: string
           invoice_naming?: string
@@ -56,6 +60,8 @@ export type Database = {
           created_at?: string
           credit_limit_cents?: number | null
           due_day?: number | null
+          external_balance_at?: string | null
+          external_balance_cents?: number | null
           household_id?: string
           id?: string
           invoice_naming?: string
@@ -357,6 +363,73 @@ export type Database = {
           },
         ]
       }
+      external_transactions: {
+        Row: {
+          bill_id: string | null
+          created_at: string
+          external_id: string
+          household_id: string
+          id: number
+          link_id: string | null
+          occurred_on: string
+          provider: string
+          provider_status: string | null
+          status: string
+          transaction_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          bill_id?: string | null
+          created_at?: string
+          external_id: string
+          household_id: string
+          id?: never
+          link_id?: string | null
+          occurred_on: string
+          provider?: string
+          provider_status?: string | null
+          status: string
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          bill_id?: string | null
+          created_at?: string
+          external_id?: string
+          household_id?: string
+          id?: never
+          link_id?: string | null
+          occurred_on?: string
+          provider?: string
+          provider_status?: string | null
+          status?: string
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_transactions_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_transactions_link_id_fkey"
+            columns: ["link_id"]
+            isOneToOne: false
+            referencedRelation: "pluggy_links"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_transactions_transaction_id_fkey"
+            columns: ["transaction_id"]
+            isOneToOne: false
+            referencedRelation: "transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       household_invites: {
         Row: {
           accepted_at: string | null
@@ -586,6 +659,76 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "households"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      pluggy_links: {
+        Row: {
+          account_id: string | null
+          created_at: string
+          external_id: string
+          household_id: string
+          id: string
+          item_id: string
+          label: string
+          last_balance_cents: number | null
+          last_synced_at: string | null
+          owner_user_id: string | null
+          role: string
+          source_kind: string
+          updated_at: string
+        }
+        Insert: {
+          account_id?: string | null
+          created_at?: string
+          external_id: string
+          household_id: string
+          id?: string
+          item_id: string
+          label: string
+          last_balance_cents?: number | null
+          last_synced_at?: string | null
+          owner_user_id?: string | null
+          role?: string
+          source_kind: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string | null
+          created_at?: string
+          external_id?: string
+          household_id?: string
+          id?: string
+          item_id?: string
+          label?: string
+          last_balance_cents?: number | null
+          last_synced_at?: string | null
+          owner_user_id?: string | null
+          role?: string
+          source_kind?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pluggy_links_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pluggy_links_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pluggy_links_owner_user_id_fkey"
+            columns: ["owner_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -966,7 +1109,7 @@ export type Database = {
         | "fund"
         | "other"
       budget_period: "monthly" | "weekly"
-      tx_source: "whatsapp" | "web" | "import"
+      tx_source: "whatsapp" | "web" | "import" | "pluggy"
       tx_type: "expense" | "income" | "transfer"
     }
     CompositeTypes: {
@@ -1113,7 +1256,7 @@ export const Constants = {
         "other",
       ],
       budget_period: ["monthly", "weekly"],
-      tx_source: ["whatsapp", "web", "import"],
+      tx_source: ["whatsapp", "web", "import", "pluggy"],
       tx_type: ["expense", "income", "transfer"],
     },
   },

@@ -36,7 +36,8 @@ src/
                              # nova, [id], importar (faturas do cartão com prévia)
     (app)/orcamentos/        # limite da fatura (ritmo semanal), contas fixas do mês, plano do mês, mensal/categoria
     (app)/investimentos/     # lista, novo, [id] (atualizar valor, histórico), importar (B3 com prévia)
-    (app)/configuracoes/     # contas, cartões, contas fixas, categorias, regras de categoria, membros/telefones
+    (app)/configuracoes/     # contas, cartões, contas fixas, categorias, regras de categoria, membros/telefones,
+                             # pluggy (ligar cada conta/cartão/investimento do banco a um papel)
     api/whatsapp/webhook/route.ts   # GET (verificação) + POST (mensagens)
     api/cron/weekly-insights/route.ts   # Fase 8
   lib/
@@ -47,13 +48,14 @@ src/
     validation/*.ts          # schemas Zod dos formulários (form.ts: FormState, valor BR, apelidos)
     categories/icon-names.ts # ícones lucide permitidos nas categorias
     whatsapp/{send,verify-signature,types}.ts
+    pluggy/client.ts         # API da Pluggy (só leitura, respostas validadas com Zod), server-only
     agent/{index,tools,prompts,model}.ts # orquestração LLM + tools (model.ts escolhe o provedor)
     services/{households,accounts,categories,transactions,budgets,overview,investments,networth,
-              card-holders,merchant-rules,card-import,card-invoices,month-transactions,recurring-bills}.ts # casos de uso: usados
+              card-holders,merchant-rules,card-import,card-invoices,month-transactions,recurring-bills,pluggy}.ts # casos de uso: usados
                                          # pelas Server Actions do site E pelas tools do bot
     services/errors.ts       # ServiceError (mensagem PT-BR para o usuário)
     finance/{money,dates,ledger,billing,balances,installments,phone,summary,budget,insights,portfolio,networth,
-             spent-by,categorize,spending-view,month-view,payment-account,pacing,recurring,month-plan}.ts # regras puras (testáveis)
+             spent-by,categorize,spending-view,month-view,payment-account,pacing,recurring,month-plan,pluggy-links}.ts # regras puras (testáveis)
     importers/excel.ts       # helpers de planilha (magic bytes, números/datas BR, leitura) — B3 e faturas
     importers/limits.ts      # MAX_UPLOAD_BYTES (sem dependências: usado também no navegador)
     importers/b3-excel.ts    # Excel de posição da B3 -> ativos normalizados (puro, sem I/O)
@@ -63,7 +65,7 @@ src/
 supabase/
   migrations/                # 0001_init … 0005_investimentos, 0006_import_fatura_pessoas, 0007_faturas_pagas,
                              # 0008_fatura_referencia, 0009_exclusao_definitiva, 0010_remove_deleted_at, 0011_conta_pagamento_fatura,
-                             # 0012_orcamento_cartao, 0013_contas_fixas
+                             # 0012_orcamento_cartao, 0013_contas_fixas, 0014_pluggy
   pending/                   # (criar quando preciso) migrations que NÃO podem ir no próximo `db push`;
                              # só depois do deploy: mover para migrations/ e dar push
   seed.sql                   # só dev local (`supabase db reset`); nunca vai para o remoto
@@ -120,6 +122,20 @@ docs/ROADMAP.md
 - Insights (`lib/finance/insights.ts`, no máximo 3, mais graves primeiro): ritmo da semana, orçamento do
   mês, categoria estourada, contas fixas, fatura vencendo, categoria ≥ 20% e ≥ R$ 100 acima da média de
   3 meses, semana × semana (só sem limite da fatura), maiores comércios da fatura.
+
+## Pluggy (Open Finance, MeuPluggy) — em construção (Fase 4.10)
+- MeuPluggy: uso pessoal, gratuito (até 5 conexões), atualiza a cada 24h, consentimento de 1 ano.
+  Itens em `PLUGGY_ITEM_IDS` (o GET /items não funciona no MeuPluggy). Só `/v2/transactions` (cursor).
+- `pluggy_links`: cada origem (conta corrente, cartão, investimentos de um login) tem um papel:
+  `vault` (o saldo soma na conta), `reserve` (investimentos ATIVOS somam na conta: a caixinha),
+  `card`, `investments` (módulo Investimentos) ou `ignore`. **Conta Conjunta = correntes (Itaú e os
+  dois Nubank) + caixinha (CDBs)**; movimento entre elas é interno do cofre (não vira lançamento).
+  Sugestão inicial e validação em `lib/finance/pluggy-links.ts`.
+- Corte: lançamentos da Pluggy só a partir de `PLUGGY_START_DATE` (01/11/2026); antes, o que já existia.
+- `external_transactions` = dedup da sincronização (como o `import_hash`); lançamento excluído pelo
+  usuário não volta. Fatura: a do banco (`billId` → vencimento → `invoiceByDueMonth`) quando fechada;
+  aberta = estimativa pelo melhor dia, corrigida quando o banco fecha.
+- Dados reais: nada de log de conteúdo; testes e fixtures só com dados inventados.
 
 ## Tela Transações (o mês manda em tudo)
 - Mês escolhido → uma seção por cartão com ciclo ("Fatura <cartão> · <mês> (dd/mm a dd/mm) · vence dd/mm",
@@ -270,6 +286,10 @@ WHATSAPP_APP_SECRET=
 WHATSAPP_WEEKLY_TEMPLATE=
 # --- a partir da Fase 8 (insights agendados) ---
 CRON_SECRET=
+# --- Pluggy (Fase 4.10) ---
+PLUGGY_CLIENT_ID=
+PLUGGY_CLIENT_SECRET=
+PLUGGY_ITEM_IDS=            # itens do MeuPluggy, separados por vírgula
 ```
 `BRAPI_TOKEN` não é usado: cotação automática ficou em "Ideias para depois" no ROADMAP.
 

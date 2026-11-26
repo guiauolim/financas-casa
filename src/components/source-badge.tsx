@@ -2,13 +2,14 @@ import type { ValueSource } from "@/lib/services/investments";
 import type { TxSource } from "@/lib/services/transactions";
 import { cn } from "@/lib/utils";
 
-// Origem de um lançamento (WhatsApp/Site/Importado) ou do valor de um investimento (Manual/B3).
+// Origem de um lançamento (WhatsApp/Site/Importado/Banco via Pluggy) ou do valor de um investimento (Manual/B3).
 type Source = TxSource | ValueSource;
 
 const STYLES: Record<Source, { label: string; className: string }> = {
   whatsapp: { label: "WhatsApp", className: "bg-primary-soft text-primary-soft-foreground" },
   web: { label: "Site", className: "bg-muted text-muted-foreground" },
   import: { label: "Importado", className: "bg-[#E3ECF8] text-[#2A548F]" },
+  pluggy: { label: "Banco", className: "bg-[#E3ECF8] text-[#2A548F]" },
   manual: { label: "Manual", className: "bg-muted text-muted-foreground" },
   b3: { label: "B3", className: "bg-[#E3ECF8] text-[#2A548F]" },
 };
