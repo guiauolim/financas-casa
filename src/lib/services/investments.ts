@@ -337,6 +337,32 @@ export async function updateInvestmentValue(
   return (await getInvestment(db, { householdId: actor.householdId, investmentId: current.id }))!;
 }
 
+// Investimentos que não vêm do banco (B3 ou cadastrados à mão), inclusive arquivados.
+export async function countInvestmentsNotFromBank(db: Db, { householdId }: { householdId: string }): Promise<number> {
+  const { count, error } = await db
+    .from("investments")
+    .select("id", { count: "exact", head: true })
+    .eq("household_id", householdId)
+    .neq("source", "pluggy");
+  throwIf(error);
+  return count ?? 0;
+}
+
+// Exclui de vez os investimentos que não vêm do banco (e o histórico deles, por cascata) e o
+// registro das importações da B3. Pedido do usuário ao passar os investimentos para a Pluggy.
+export async function deleteInvestmentsNotFromBank(db: Db, actor: Actor): Promise<number> {
+  const { data, error } = await db
+    .from("investments")
+    .delete()
+    .eq("household_id", actor.householdId)
+    .neq("source", "pluggy")
+    .select("id");
+  throwIf(error);
+  const { error: importsError } = await db.from("b3_imports").delete().eq("household_id", actor.householdId);
+  throwIf(importsError);
+  return data?.length ?? 0;
+}
+
 // Vendido/resgatado: sai dos totais a partir de hoje, mas o histórico fica.
 export async function setInvestmentArchived(
   db: Db,

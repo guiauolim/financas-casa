@@ -11,6 +11,7 @@ import {
   applyB3Import,
   type B3Preview,
   createInvestment,
+  deleteInvestmentsNotFromBank,
   previewB3Import,
   setInvestmentArchived,
   updateInvestment,
@@ -86,6 +87,17 @@ export async function setInvestmentArchivedAction(formData: FormData): Promise<A
   }
   refresh();
   return { success: archived ? "Investimento arquivado." : "Investimento reativado." };
+}
+
+export async function deleteInvestmentsNotFromBankAction(): Promise<ActionResult> {
+  const actor = await requireActor();
+  try {
+    const deleted = await deleteInvestmentsNotFromBank(await createClient(), actor);
+    refresh();
+    return { success: `${deleted} investimentos excluídos.` };
+  } catch (error) {
+    return serviceErrorState(error, "Não foi possível excluir os investimentos.");
+  }
 }
 
 // ───────────────────────── Importação da B3 ─────────────────────────

@@ -16,10 +16,10 @@ import { daysBetween, formatDate, todayInSaoPaulo } from "@/lib/finance/dates";
 import { formatBRL } from "@/lib/finance/money";
 import { ASSET_CLASS_LABELS } from "@/lib/finance/portfolio";
 import { listMembers, type Member } from "@/lib/services/households";
-import { getPortfolio, type PortfolioItem } from "@/lib/services/investments";
+import { countInvestmentsNotFromBank, getPortfolio, type PortfolioItem } from "@/lib/services/investments";
 import { createClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
-import { setInvestmentArchivedAction } from "./actions";
+import { deleteInvestmentsNotFromBankAction, setInvestmentArchivedAction } from "./actions";
 import { InvestedChart } from "./invested-chart";
 
 export const metadata: Metadata = { title: "Investimentos" };
@@ -90,10 +90,12 @@ async function PortfolioView({ searchParams }: Pick<PageProps<"/investimentos">,
   const actor = await requireActor();
   const db = await createClient(); // faz `await connection()` antes do Date.now()
   const today = todayInSaoPaulo();
-  const [portfolio, members] = await Promise.all([
+  const [portfolio, members, notFromBank] = await Promise.all([
     getPortfolio(db, { householdId: actor.householdId, today, includeArchived: showArchived }),
     listMembers(db, { householdId: actor.householdId }),
+    countInvestmentsNotFromBank(db, { householdId: actor.householdId }),
   ]);
+  const hasBankInvestments = portfolio.items.some((i) => i.source === "pluggy");
   const memberName = (userId: string) => members.find((m) => m.userId === userId)?.displayName ?? "Membro";
   const activeCount = portfolio.items.filter((i) => i.archivedOn === null).length;
 
@@ -112,6 +114,22 @@ async function PortfolioView({ searchParams }: Pick<PageProps<"/investimentos">,
 
   return (
     <div className="flex flex-col gap-4">
+      {notFromBank > 0 ? (
+        <Panel
+          title="Investimentos que não vêm do banco"
+          description={`${notFromBank} ${notFromBank === 1 ? "ativo veio" : "ativos vieram"} da B3 ou do cadastro à mão (contando os arquivados). Agora os investimentos vêm do banco pela Pluggy.${hasBankInvestments ? "" : " Atenção: nenhum investimento do banco chegou ainda — depois de excluir, a lista fica vazia até a próxima sincronização."}`}
+        >
+          <div>
+            <ConfirmAction
+              action={deleteInvestmentsNotFromBankAction}
+              trigger={`Excluir os ${notFromBank} que não vêm do banco`}
+              title={`Excluir ${notFromBank} investimentos de vez?`}
+              description="Os ativos da B3 e os cadastrados à mão saem, com todo o histórico (o gráfico de patrimônio perde esses valores nos meses passados). Os do Banco do Brasil voltam quando o BB for conectado na Pluggy. Não dá para desfazer."
+              options={[{ label: "Excluir de vez", fields: {}, destructive: true }]}
+            />
+          </div>
+        </Panel>
+      ) : null}
       {stale.length ? (
         <p className="flex items-start gap-2 rounded-xl border border-[#F1D9BD] bg-[#FBF3E9] px-4 py-3 text-[13px] text-warning-foreground">
           <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
