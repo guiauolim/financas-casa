@@ -55,3 +55,6 @@ supabase/.branches/
 !src/lib/importers/__fixtures__/b3-posicao-ficticia.xlsx
 !src/lib/importers/__fixtures__/itau-fatura-ficticia-*.xlsx
 !src/lib/importers/__fixtures__/itau-fatura-ficticia.xls
+
+# Relatórios de auditoria de segurança: descrevem falhas abertas (repo público)
+docs/security/
