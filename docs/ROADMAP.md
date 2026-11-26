@@ -214,9 +214,12 @@ Sincronização por webhook/cron (também mantém o Supabase gratuito ativo).
       Tesouro), Nubank Mariana (conta, cartão gold, caixinha = CDBs). BB fica para depois.
 - [x] Etapa 1 — base: migration `0014_pluggy.sql`, `lib/pluggy/client.ts`, Configurações → Bancos (Pluggy)
       para ligar cada origem (Conta Conjunta = correntes + caixinha; gold = cartão; Tesouro = Investimentos)
-- [ ] Etapa 2 — sincronização (lançamentos desde 01/11, faturas pelo banco, conciliação do pagamento,
-      saldos, investimentos), botão + cron diário
-- [ ] Etapa 3 — virada: diagnóstico do que sai de novembro em diante, OK do usuário, primeira sync
+- [x] Etapa 2 — sincronização (lançamentos desde 01/11, faturas pelo banco, conciliação do pagamento,
+      saldos do banco, Tesouro em Investimentos), botão + cron diário, melhor dia sugerido, "Sobra do mês"
+      e aviso de dinheiro parado fora da caixinha
+- [ ] Etapa 3 — virada (pela tela: Configurações → Bancos mostra o que sai de novembro em diante e pede
+      confirmação), primeira sync e conferência com os apps dos bancos
+- [ ] Depois: marcar "estimada" × "fechada pelo banco" na seção da fatura em Transações; BB; tirar a B3
 
 ---
 

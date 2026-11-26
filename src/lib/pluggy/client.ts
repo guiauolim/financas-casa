@@ -159,19 +159,17 @@ export function createPluggyClient(config: PluggyConfig, fetchImpl: typeof fetch
       return (await get(`/accounts?itemId=${encodeURIComponent(itemId)}`, pageOf(accountSchema))).results;
     },
 
-    // /v2/transactions: paginação por cursor (`next`); a /transactions por página foi descontinuada.
+    // /v2/transactions: paginação por cursor; a /transactions por página foi descontinuada.
     async listTransactions(accountId: string, { from, to }: { from: string; to?: string }): Promise<PluggyTransaction[]> {
       const rows: PluggyTransaction[] = [];
-      let after: string | null = null;
-      do {
-        const q = new URLSearchParams({ accountId, dateFrom: from, ...(to ? { dateTo: to } : {}), ...(after ? { after } : {}) });
-        const page: { results: PluggyTransaction[]; next?: string | null } = await get(
-          `/v2/transactions?${q}`,
-          cursorPageOf(transactionSchema),
-        );
+      // `next` é o resto do caminho (GET /v2/transactions{next}), não só o valor do cursor.
+      const first = new URLSearchParams({ accountId, dateFrom: from, ...(to ? { dateTo: to } : {}) });
+      let path: string | null = `/v2/transactions?${first}`;
+      for (let guard = 0; path && guard < 200; guard++) {
+        const page: { results: PluggyTransaction[]; next?: string | null } = await get(path, cursorPageOf(transactionSchema));
         rows.push(...page.results);
-        after = page.next ?? null;
-      } while (after);
+        path = page.next ? (page.next.startsWith("/v2/") ? page.next : `/v2/transactions${page.next}`) : null;
+      }
       return rows;
     },
 

@@ -4,6 +4,7 @@ import { monthFromParam } from "@/components/month-nav";
 import { requireActor } from "@/lib/auth/session";
 import { parseYearMonth, todayInSaoPaulo } from "@/lib/finance/dates";
 import { listMembers } from "@/lib/services/households";
+import { listPluggyLinks } from "@/lib/services/pluggy";
 import { getMonthOverview } from "@/lib/services/overview";
 import { listRecentTransactions } from "@/lib/services/transactions";
 import { createClient } from "@/lib/supabase/server";
@@ -35,6 +36,16 @@ export const loadRecent = cache(async (mes: string | undefined) => {
     listMembers(db, { householdId: actor.householdId }),
   ]);
   return { month, allMonths, transactions, memberIds: members.map((m) => m.userId) };
+});
+
+// Dinheiro do cofre fora da caixinha: saldo das contas correntes ligadas à Pluggy (último sync).
+export const loadIdleMoney = cache(async (mes: string | undefined) => {
+  const { actor, db } = await context(mes);
+  const links = await listPluggyLinks(db, { householdId: actor.householdId });
+  const checking = links.filter((l) => l.role === "vault" && l.lastBalanceCents != null);
+  const hasReserve = links.some((l) => l.role === "reserve");
+  if (!hasReserve || checking.length === 0) return null;
+  return checking.reduce((sum, l) => sum + (l.lastBalanceCents ?? 0), 0);
 });
 
 export const mesParam = (value: string | string[] | undefined) => (typeof value === "string" ? value : undefined);

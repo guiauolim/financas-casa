@@ -38,6 +38,7 @@ export type DiscoveredSource = {
   balanceCents: number | null; // corrente: saldo; investimentos: soma dos ativos; cartão: null
   activity: number; // cartão: lançamentos desde o corte; investimentos: quantos ativos
   investmentKinds: string[]; // "FIXED_INCOME/CDB", "FIXED_INCOME/TREASURY"…
+  suggestedClosingDay?: number | null; // cartão: melhor dia de compra pelas faturas fechadas
 };
 
 export type LinkAccount = { id: string; name: string; kind: string; ownerUserId: string | null; archived: boolean };

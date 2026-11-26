@@ -9,6 +9,8 @@ import {
   type PluggySourceKind,
   sourceKey,
 } from "@/lib/finance/pluggy-links";
+import { addDays, todayInSaoPaulo } from "@/lib/finance/dates";
+import { suggestClosingDay } from "@/lib/importers/pluggy/plan";
 import { type PluggyClient, toCents } from "@/lib/pluggy/client";
 import { ServiceError, throwIf } from "./errors";
 import type { Actor, Db } from "./types";
@@ -36,8 +38,17 @@ export async function discoverPluggySources(client: PluggyClient): Promise<Plugg
       const sources: DiscoveredSource[] = [];
       for (const account of accounts) {
         const kind: PluggySourceKind = account.type === "CREDIT" ? "card" : "bank_account";
-        const activity =
-          kind === "card" ? (await client.listTransactions(account.id, { from: PLUGGY_START_DATE })).length : 0;
+        let activity = 0;
+        let suggestedClosingDay: number | null = null;
+        if (kind === "card") {
+          // ~6 meses de faturas fechadas para sugerir o melhor dia de compra.
+          const [transactions, bills] = await Promise.all([
+            client.listTransactions(account.id, { from: addDays(todayInSaoPaulo(), -180) }),
+            client.listBills(account.id),
+          ]);
+          activity = transactions.filter((t) => t.date.slice(0, 10) >= PLUGGY_START_DATE).length;
+          suggestedClosingDay = suggestClosingDay(transactions, bills);
+        }
         sources.push({
           key: sourceKey(kind, account.id),
           itemId,
@@ -47,6 +58,7 @@ export async function discoverPluggySources(client: PluggyClient): Promise<Plugg
           balanceCents: kind === "bank_account" && account.balance != null ? toCents(account.balance) : null,
           activity,
           investmentKinds: [],
+          suggestedClosingDay,
         });
       }
       const active = investments.filter((i) => i.status !== "TOTAL_WITHDRAWAL");

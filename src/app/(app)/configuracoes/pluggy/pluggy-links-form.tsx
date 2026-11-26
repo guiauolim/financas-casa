@@ -51,7 +51,7 @@ export function PluggyLinksForm({
   members,
 }: {
   groups: ItemGroup[];
-  accounts: LinkAccount[];
+  accounts: (LinkAccount & { closingDay: number | null })[];
   members: { id: string; name: string }[];
 }) {
   const [state, action, pending] = useActionState(savePluggyLinksAction, {} as FormState);
@@ -146,6 +146,13 @@ export function PluggyLinksForm({
                       </select>
                     </label>
                   ) : null}
+                  {role === "card" && source.suggestedClosingDay ? (
+                    <ClosingDayHint
+                      suggested={source.suggestedClosingDay}
+                      current={cards.find((c) => c.id === choice.accountId)?.closingDay ?? null}
+                      accountId={choice.accountId}
+                    />
+                  ) : null}
                 </li>
               );
             })}
@@ -166,10 +173,30 @@ export function PluggyLinksForm({
         <Button type="submit" disabled={pending}>
           {pending ? "Salvando…" : "Salvar ligações"}
         </Button>
-        <Button type="button" variant="outline" disabled title="Chega na próxima etapa">
-          Sincronizar agora (em breve)
-        </Button>
       </div>
     </form>
+  );
+}
+
+// Melhor dia de compra visto nas faturas fechadas do banco × o cadastrado no cartão.
+function ClosingDayHint({ suggested, current, accountId }: { suggested: number; current: number | null; accountId: string | null }) {
+  const matches = current === suggested;
+  return (
+    <p className="basis-full pl-8 text-[12px] text-muted-foreground">
+      Pelas faturas do banco, o melhor dia de compra é <span className="font-mono">{suggested}</span>
+      {current ? (
+        <>
+          {" "}
+          (cadastrado: <span className="font-mono">{current}</span>){matches ? "." : ". "}
+        </>
+      ) : (
+        ". "
+      )}
+      {!matches && accountId ? (
+        <Link href={`/configuracoes/contas/${accountId}`} className="font-medium text-primary underline-offset-4 hover:underline">
+          Ajustar no cartão
+        </Link>
+      ) : null}
+    </p>
   );
 }

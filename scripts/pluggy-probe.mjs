@@ -28,13 +28,13 @@ const range = (dates) => (dates.length ? `${dates.sort()[0].slice(0, 10)} a ${da
 
 async function allTransactions(apiKey, accountId, dateFrom) {
   const rows = [];
-  let after = null;
-  do {
-    const q = new URLSearchParams({ accountId, dateFrom, ...(after ? { after } : {}) });
-    const page = await api(`/v2/transactions?${q}`, apiKey);
+  // `next` é o resto do caminho (GET /v2/transactions{next}), não só o valor do cursor.
+  let path = `/v2/transactions?${new URLSearchParams({ accountId, dateFrom })}`;
+  while (path) {
+    const page = await api(path, apiKey);
     rows.push(...page.results);
-    after = page.next ?? null;
-  } while (after);
+    path = page.next ? (page.next.startsWith("/v2/") ? page.next : `/v2/transactions${page.next}`) : null;
+  }
   return rows;
 }
 

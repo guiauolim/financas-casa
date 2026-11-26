@@ -8,20 +8,37 @@ export type BalanceAccount = {
   id: string;
   openingBalanceCents: number;
   openingBalanceDate: string | null; // sem data: considera todos os lançamentos
+  // Saldo informado pelo banco (Pluggy) e o dia dele. Quando existe, manda: ver `accountBalance`.
+  externalBalanceCents?: number | null;
+  externalBalanceOn?: string | null;
 };
+
+// Efeito de um lançamento no saldo da conta (0 se não mexe nela).
+function entryEffect(accountId: string, entry: LedgerEntry): number {
+  if (entry.accountId === accountId) return entry.type === "income" ? entry.amountCents : -entry.amountCents;
+  if (entry.type === "transfer" && entry.transferAccountId === accountId) return entry.amountCents;
+  return 0;
+}
 
 // Saldo = saldo inicial + entradas − saídas − transferências que saem + transferências que entram,
 // só com lançamentos a partir de `openingBalanceDate` e até `asOf` (lançamentos futuros não contam).
+// Com saldo do banco: é ele no dia informado (e depois); antes disso, volta-se pelos lançamentos
+// entre `asOf` e o dia do banco (saldo do banco − o que aconteceu depois de `asOf`).
 export function accountBalance(account: BalanceAccount, entries: readonly LedgerEntry[], asOf?: string): number {
+  const { externalBalanceCents, externalBalanceOn } = account;
+  if (externalBalanceCents != null && externalBalanceOn) {
+    if (!asOf || asOf >= externalBalanceOn) return externalBalanceCents;
+    let balance = externalBalanceCents;
+    for (const entry of entries) {
+      if (entry.occurredOn > asOf && entry.occurredOn <= externalBalanceOn) balance -= entryEffect(account.id, entry);
+    }
+    return balance;
+  }
   let balance = account.openingBalanceCents;
   for (const entry of entries) {
     if (account.openingBalanceDate && entry.occurredOn < account.openingBalanceDate) continue;
     if (asOf && entry.occurredOn > asOf) continue;
-    if (entry.accountId === account.id) {
-      balance += entry.type === "income" ? entry.amountCents : -entry.amountCents;
-    } else if (entry.type === "transfer" && entry.transferAccountId === account.id) {
-      balance += entry.amountCents;
-    }
+    balance += entryEffect(account.id, entry);
   }
   return balance;
 }

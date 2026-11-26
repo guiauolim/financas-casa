@@ -23,7 +23,7 @@ import type {
 import { ServiceError, throwIf } from "./errors";
 import type { Actor, Db } from "./types";
 
-export type ValueSource = "manual" | "b3";
+export type ValueSource = "manual" | "b3" | "pluggy"; // b3 e pluggy: valor vem de fora
 
 export type Investment = {
   id: string;
@@ -76,7 +76,7 @@ const toInvestment = (row: Row): Investment => ({
   currentValueCents: row.current_value_cents,
   netValueCents: row.net_value_cents,
   valueAsOf: row.value_as_of,
-  source: row.source === "b3" ? "b3" : "manual",
+  source: row.source === "b3" || row.source === "pluggy" ? row.source : "manual",
   externalId: row.external_id,
   aliases: row.aliases,
   archivedOn: row.archived_on,
@@ -276,8 +276,8 @@ export async function updateInvestment(
   const current = await getInvestment(db, { householdId: actor.householdId, investmentId });
   if (!current) throw new ServiceError("Investimento não encontrado.");
   let columns;
-  if (current.source === "b3") {
-    // Da B3 só se editam nome, classe e apelidos; o resto vem da importação.
+  if (current.source !== "manual") {
+    // Da B3/Pluggy só se editam nome, classe e apelidos; o resto vem de fora.
     columns = { name: input.name, asset_class: input.assetClass, aliases: input.aliases };
   } else {
     if (!("ownerUserId" in input)) throw new ServiceError("Dados incompletos.");
@@ -303,8 +303,10 @@ export async function updateInvestmentValue(
 ): Promise<Investment> {
   const current = await getInvestment(db, { householdId: actor.householdId, investmentId: input.investmentId });
   if (!current) throw new ServiceError("Investimento não encontrado.");
-  if (current.source === "b3") {
-    throw new ServiceError("Este ativo é atualizado pela importação da B3.");
+  if (current.source !== "manual") {
+    throw new ServiceError(
+      current.source === "pluggy" ? "Este ativo é atualizado pelo banco (Pluggy)." : "Este ativo é atualizado pela importação da B3.",
+    );
   }
   if (current.archivedOn) throw new ServiceError("Este ativo está arquivado. Reative para atualizar o valor.");
   if (input.date > today) throw new ServiceError("A data não pode ser no futuro.", "date");

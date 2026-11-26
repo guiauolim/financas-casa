@@ -276,7 +276,7 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
             hint="Salário e outras entradas nas contas."
           />
           <Kpi label="Despesas do mês" value={<Money cents={totals.totalCents} />} hint="Cartão + fora do cartão." />
-          <Kpi label="Saldo do mês" value={<Money cents={totals.balanceCents} />} hint="Receitas − despesas do mês." />
+          <Kpi label="Sobra do mês" value={<Money cents={totals.balanceCents} />} hint="Receitas − despesas do mês." />
         </div>
 
         {empty ? (

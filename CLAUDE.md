@@ -39,6 +39,7 @@ src/
     (app)/configuracoes/     # contas, cartões, contas fixas, categorias, regras de categoria, membros/telefones,
                              # pluggy (ligar cada conta/cartão/investimento do banco a um papel)
     api/whatsapp/webhook/route.ts   # GET (verificação) + POST (mensagens)
+    api/cron/pluggy-sync/route.ts       # sync diário com a Pluggy (CRON_SECRET)
     api/cron/weekly-insights/route.ts   # Fase 8
   lib/
     supabase/{server,client,admin}.ts   # admin = service role, SÓ server-side
@@ -123,7 +124,7 @@ docs/ROADMAP.md
   mês, categoria estourada, contas fixas, fatura vencendo, categoria ≥ 20% e ≥ R$ 100 acima da média de
   3 meses, semana × semana (só sem limite da fatura), maiores comércios da fatura.
 
-## Pluggy (Open Finance, MeuPluggy) — em construção (Fase 4.10)
+## Pluggy (Open Finance, MeuPluggy) — Fase 4.10
 - MeuPluggy: uso pessoal, gratuito (até 5 conexões), atualiza a cada 24h, consentimento de 1 ano.
   Itens em `PLUGGY_ITEM_IDS` (o GET /items não funciona no MeuPluggy). Só `/v2/transactions` (cursor).
 - `pluggy_links`: cada origem (conta corrente, cartão, investimentos de um login) tem um papel:
@@ -135,6 +136,23 @@ docs/ROADMAP.md
 - `external_transactions` = dedup da sincronização (como o `import_hash`); lançamento excluído pelo
   usuário não volta. Fatura: a do banco (`billId` → vencimento → `invoiceByDueMonth`) quando fechada;
   aberta = estimativa pelo melhor dia, corrigida quando o banco fecha.
+- Sincronização (`services/pluggy-sync.ts` → plano puro `importers/pluggy/plan.ts`): corrente do cofre:
+  saída = despesa, entrada = receita (salário/rendimento reconhecidos); aplicação/resgate, pix entre CPFs
+  da casa (CPFs só em memória) e débito de fatura → absorvidos. Cartão: compra/encargo = despesa,
+  estorno = receita, pagamento = transferência conta pagadora → cartão, **conciliada** com um "Pagar
+  fatura" já lançado (mesmo cartão e valor, ±5 dias). Id do lançamento = UUID derivado do id da Pluggy
+  (repetir não duplica). Re-sync atualiza valor/data/fatura só de `source='pluggy'`, nunca categoria/pessoa.
+  PENDING que some da Pluggy é apagado.
+- Saldo: conta com origens ligadas usa o saldo do banco (`accounts.external_balance_*`, soma das origens;
+  `accountBalance` volta pelos lançamentos para datas anteriores). Detalhe por origem em
+  `pluggy_links.last_balance_cents`. Investimentos (Tesouro): um ativo por título (nome + vencimento),
+  `source='pluggy'`, snapshot a cada sync; valor travado como na B3.
+- Virada (`services/pluggy-cutover.ts`): antes da 1ª sync, os lançamentos não-Pluggy das contas ligadas
+  a partir do corte são substituídos (confirmação "Não dá para desfazer"), menos os pagamentos de fatura
+  (ficam para conciliar). Enquanto houver algo a substituir, a sync recusa (evita contar em dobro).
+- Agenda: botão em Configurações → Bancos e Vercel Cron diário `/api/cron/pluggy-sync` (`vercel.json`,
+  `Authorization: Bearer ${CRON_SECRET}`, cliente admin). Melhor dia sugerido por `suggestClosingDay`.
+- Cursor da `/v2/transactions`: `next` é o resto do caminho (`/v2/transactions{next}`), não o valor do cursor.
 - Dados reais: nada de log de conteúdo; testes e fixtures só com dados inventados.
 
 ## Tela Transações (o mês manda em tudo)
@@ -265,7 +283,7 @@ docs/ROADMAP.md
 - RLS ligado em TODAS as tabelas; acesso por `is_household_member(household_id)`.
 - O proxy **não** roda em `/api/*`: cada rota de API se autentica sozinha (webhook pela assinatura
   `X-Hub-Signature-256`; crons por `Authorization: Bearer ${CRON_SECRET}`).
-- Rotas `/api/cron/*` (a partir da Fase 8) exigem `Authorization: Bearer ${CRON_SECRET}`.
+- Rotas `/api/cron/*` (hoje: pluggy-sync) exigem `Authorization: Bearer ${CRON_SECRET}`.
 - Não logar conteúdo de mensagens nem valores em logs da Vercel além do necessário.
 
 ## Variáveis de ambiente
@@ -284,7 +302,7 @@ WHATSAPP_PHONE_NUMBER_ID=
 WHATSAPP_VERIFY_TOKEN=
 WHATSAPP_APP_SECRET=
 WHATSAPP_WEEKLY_TEMPLATE=
-# --- a partir da Fase 8 (insights agendados) ---
+# --- cron (sync da Pluggy; insights agendados na Fase 8) ---
 CRON_SECRET=
 # --- Pluggy (Fase 4.10) ---
 PLUGGY_CLIENT_ID=

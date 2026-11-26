@@ -11,7 +11,7 @@ import { saveInvestmentAction } from "./actions";
 
 export type InvestmentFormValues = {
   id?: string;
-  source: "manual" | "b3";
+  source: "manual" | "b3" | "pluggy";
   name: string;
   assetClass: AssetClass;
   institution: string | null;
@@ -36,7 +36,7 @@ export function InvestmentForm({
 }) {
   const [state, action, pending] = useActionState(saveInvestmentAction, {} as FormState);
   const errors = state.fieldErrors ?? {};
-  const isB3 = investment?.source === "b3";
+  const isB3 = investment?.source === "b3" || investment?.source === "pluggy"; // valor vem de fora
   const isNew = !investment?.id;
 
   return (
@@ -45,8 +45,10 @@ export function InvestmentForm({
       {investment ? <input type="hidden" name="source" value={investment.source} /> : null}
       {isB3 ? (
         <p className="rounded-lg bg-[#E3ECF8] px-3 py-2 text-[13px] text-[#2A548F]">
-          Ativo importado da B3: dono, código, quantidade e valor vêm da importação. Aqui você edita só o nome, a
-          classe e os apelidos.
+          {investment?.source === "pluggy"
+            ? "Ativo sincronizado com o banco (Pluggy): dono, quantidade e valor vêm do banco."
+            : "Ativo importado da B3: dono, código, quantidade e valor vêm da importação."}{" "}
+          Aqui você edita só o nome, a classe e os apelidos.
         </p>
       ) : null}
       <Field
