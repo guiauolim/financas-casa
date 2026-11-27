@@ -243,8 +243,9 @@ docs/ROADMAP.md
 - Não usar `"use cache: private"` em leituras de profile/sessão: cachearia "sem profile" logo após o onboarding.
 
 ## Supabase — banco e Auth
-- Migrations novas em `supabase/migrations/NNNN_nome.sql`; aplicar com `pnpm supabase db push` e
-  depois `pnpm db:types`. Nunca editar uma migration já aplicada.
+- Migrations novas em `supabase/migrations/NNNN_nome.sql`; aplicar com `pnpm supabase db push --remote`
+  (conferir antes com `--remote --dry-run`) e depois `pnpm db:types`. Nunca editar uma migration já aplicada.
+  CLI 3: sem `--remote` o `db push`/`migration list` miram o banco **local** (não temos: só dá erro de conexão).
 - O banco é aplicado antes do deploy: toda migration em `migrations/` tem que ser compatível com o
   código que está em produção. O que quebra o código antigo (remover coluna etc.) fica em
   `supabase/pending/` e só entra depois do merge e do deploy.
