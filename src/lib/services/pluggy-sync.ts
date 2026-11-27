@@ -1,5 +1,5 @@
 import "server-only";
-import { todayInSaoPaulo } from "@/lib/finance/dates";
+import { addDays, todayInSaoPaulo } from "@/lib/finance/dates";
 import { cardPaymentAccount } from "@/lib/finance/payment-account";
 import { PLUGGY_START_DATE } from "@/lib/finance/pluggy-links";
 import type { PlanCategory } from "@/lib/importers/card-statement/plan";
@@ -99,7 +99,8 @@ export async function syncPluggy(
       }
       if (link.sourceKind === "card") {
         const [transactions, bills] = await Promise.all([
-          client.listTransactions(link.externalId, { from: PLUGGY_START_DATE }),
+          // Antes do corte também: o fim do mês anterior pode ser da 1ª fatura (o plano filtra pela fatura).
+          client.listTransactions(link.externalId, { from: addDays(PLUGGY_START_DATE, -45) }),
           client.listBills(link.externalId),
         ]);
         return { linkId: link.id, kind: "card", transactions, bills };

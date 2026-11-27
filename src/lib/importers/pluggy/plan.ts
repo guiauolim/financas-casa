@@ -11,7 +11,8 @@ import type { PluggyBill, PluggyInvestment, PluggyTransaction } from "@/lib/plug
 // mesmos dados não muda nada (o id do lançamento é derivado do id da Pluggy).
 //
 // Regras (ver CLAUDE.md, "Pluggy"):
-// - Só a partir de `startDate`; antes fica o que já estava no sistema.
+// - Só a partir de `startDate`; antes fica o que já estava no sistema. No cartão, a partir da FATURA
+//   que contém `startDate` (pega o fim do mês anterior que o banco pôs nela).
 // - Conta corrente do cofre (role vault): saída → despesa, entrada → receita. Aplicação/resgate,
 //   pix entre CPFs da casa e o débito do pagamento de fatura são internos → absorvidos (o
 //   pagamento é contado no lado do cartão).
@@ -133,6 +134,9 @@ export type SyncPlan = {
   warnings: string[];
   counts: { created: number; updated: number; deleted: number; absorbed: number; reconciled: number; uncategorized: number };
 };
+
+// Primeira fatura que vem da Pluggy num cartão: a que contém a data do corte.
+export const pluggyCardStartRef = (startDate: string, card: CardCycle) => invoiceFor(startDate, card).ref;
 
 export const pluggyTxId = (householdId: string, externalId: string) => uuidFromKey(`pluggy|${householdId}|${externalId}`);
 
@@ -335,16 +339,22 @@ export function planPluggySync(input: SyncInput): SyncPlan {
         continue;
       }
       const bills = new Map(source.bills.map((b) => [b.id, b]));
+      // No cartão o corte é pela FATURA: entra tudo da fatura que contém startDate em diante
+      // (compras do fim do mês anterior que o banco pôs nela, ex.: 26 a 31/10 na de novembro).
+      const startRef = pluggyCardStartRef(startDate, card);
       for (const tx of source.transactions) {
         const occurredOn = day(tx.date);
-        if (occurredOn < startDate) continue;
         const meta = tx.creditCardMetadata;
         const bill = meta?.billId ? bills.get(meta.billId) : undefined;
         const billId = bill ? bill.id : null;
         const amountCents = toCents(Math.abs(tx.amount));
         const last4 = meta?.cardNumber?.replace(/\D/g, "").slice(-4) || null;
+        // Fatura do banco (billId → vencimento) quando fechada; senão a estimada pelo melhor dia.
+        const invoiceRef = bill ? invoiceByDueMonth(day(bill.dueDate).slice(0, 7), card).ref : invoiceFor(occurredOn, card).ref;
 
         if (isCardPayment(tx)) {
+          // Pagamento: pela data (o de antes do corte paga uma fatura que já estava no sistema).
+          if (occurredOn < startDate) continue;
           record(tx, link, billId, () => {
             const match = input.openPayments.find(
               (p) =>
@@ -384,6 +394,7 @@ export function planPluggySync(input: SyncInput): SyncPlan {
           continue;
         }
 
+        if (invoiceRef < startRef) continue;
         record(tx, link, billId, () => {
           const type = tx.amount < 0 ? "income" : "expense";
           const categoryId =
@@ -402,7 +413,6 @@ export function planPluggySync(input: SyncInput): SyncPlan {
             : number
               ? addMonthsToDate(occurredOn, -(number - 1))
               : occurredOn;
-          const invoiceRef = bill ? invoiceByDueMonth(day(bill.dueDate).slice(0, 7), card).ref : invoiceFor(occurredOn, card).ref;
           return {
             status: "linked",
             tx: {

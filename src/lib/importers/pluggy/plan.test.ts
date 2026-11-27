@@ -179,6 +179,34 @@ describe("cartão", () => {
     expect(plan.externals.find((e) => e.external_id === "borda")?.bill_id).toBe("b-dez");
   });
 
+  it("corte pela fatura: fim de outubro que é da fatura de novembro entra; o resto de outubro não", () => {
+    // Melhor dia 26: a fatura de novembro vai de 26/10 a 25/11.
+    const bills = [
+      { id: "b-out", dueDate: "2026-11-03T00:00:00Z" },
+      { id: "b-nov", dueDate: "2026-12-03T00:00:00Z" },
+    ];
+    const plan = planPluggySync(
+      input([
+        cardData(
+          [
+            cardTx({ id: "out-20", amount: 10, date: "2026-10-20T12:00:00Z", creditCardMetadata: { billId: "b-out" } }),
+            cardTx({ id: "out-28-banco", amount: 20, date: "2026-10-28T12:00:00Z", creditCardMetadata: { billId: "b-nov" } }),
+            cardTx({ id: "out-30-estimada", amount: 30, date: "2026-10-30T12:00:00Z" }),
+            cardTx({ id: "pag-out", amount: -500, operationType: "PAGAMENTO_FATURA", date: "2026-10-28T12:00:00Z" }),
+            cardTx({ id: "nov-27", amount: 40, date: "2026-11-27T12:00:00Z" }),
+          ],
+          bills,
+        ),
+      ]),
+    );
+    const refs = new Map(plan.inserts.map((t) => [t.id, t.invoice_ref]));
+    expect(refs.get(pluggyTxId(HH, "out-28-banco"))).toBe("2026-11");
+    expect(refs.get(pluggyTxId(HH, "out-30-estimada"))).toBe("2026-11");
+    expect(refs.get(pluggyTxId(HH, "nov-27"))).toBe("2026-12"); // 26/11 em diante: dezembro
+    expect(refs.has(pluggyTxId(HH, "out-20"))).toBe(false); // fatura de outubro: já estava no sistema
+    expect(refs.has(pluggyTxId(HH, "pag-out"))).toBe(false); // pagamento de antes do corte
+  });
+
   it("parcelas da mesma compra no mesmo grupo; estorno vira receita", () => {
     const meta = (n: number) => ({ installmentNumber: n, totalInstallments: 3, purchaseDate: "2026-10-20T00:00:00Z" });
     const plan = planPluggySync(
