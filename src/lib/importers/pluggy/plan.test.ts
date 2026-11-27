@@ -369,6 +369,23 @@ describe("idempotência e estado existente", () => {
     expect(third.updates).toEqual([{ id: created.id, invoice_ref: "2026-11" }]);
   });
 
+  it("reclassifica o que ficou em Outros quando o histórico sabe; não mexe na escolha da pessoa", () => {
+    const history = new Map([["expense|loja ficticia", "c-mercado"]]);
+    const loja = cardTx({ id: "loja", amount: 25, description: "LOJA FICTICIA", date: "2026-11-27T10:00:00Z" });
+    const outra = cardTx({ id: "outra", amount: 30, description: "LOJA FICTICIA", date: "2026-11-27T11:00:00Z" });
+    const ids = { loja: pluggyTxId(HH, "loja"), outra: pluggyTxId(HH, "outra") };
+    const ext = (id: string, txId: string): ExistingExternal => ({ externalId: id, status: "linked", transactionId: txId, providerStatus: "POSTED", billId: null, linkId: "l-cartao" });
+    const tx = (id: string, amountCents: number, categoryId: string): ExistingTx => ({ id, source: "pluggy", type: "expense", amountCents, occurredOn: "2026-11-27", accountId: CARTAO, transferAccountId: null, invoiceRef: "2026-12", categoryId });
+    const plan = planPluggySync(
+      input([cardData([loja, outra])], {
+        history,
+        existing: new Map([["loja", ext("loja", ids.loja)], ["outra", ext("outra", ids.outra)]]),
+        existingTx: new Map([[ids.loja, tx(ids.loja, 2500, "c-outros")], [ids.outra, tx(ids.outra, 3000, "c-taxas")]]),
+      }),
+    );
+    expect(plan.updates).toEqual([{ id: ids.loja, category_id: "c-mercado" }]); // só a que estava em Outros
+  });
+
   it("lançamento excluído pelo usuário não volta", () => {
     const existing = new Map<string, ExistingExternal>([
       ["c1", { externalId: "c1", status: "linked", transactionId: null, providerStatus: "PENDING", billId: null, linkId: "l-cartao" }],

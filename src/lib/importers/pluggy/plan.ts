@@ -1,5 +1,5 @@
 import { addMonthsToRef, type CardCycle, invoiceByDueMonth, invoiceFor, paymentInvoiceRef } from "@/lib/finance/billing";
-import { categorize, findCategoryByName, type MerchantRule } from "@/lib/finance/categorize";
+import { type CategoryHistory, categorize, findCategoryByName, type MerchantRule } from "@/lib/finance/categorize";
 import { addDays, addMonthsToDate } from "@/lib/finance/dates";
 import type { PluggyRole, PluggySourceKind } from "@/lib/finance/pluggy-links";
 import type { SpentBy } from "@/lib/finance/spent-by";
@@ -64,6 +64,7 @@ export type ExistingTx = {
   accountId: string;
   transferAccountId: string | null;
   invoiceRef: string | null;
+  categoryId?: string | null;
 };
 
 export type SourceData =
@@ -80,6 +81,7 @@ export type SyncInput = {
   cards: ReadonlyMap<string, SyncCard>; // por account_id do cartão
   categories: readonly PlanCategory[];
   rules: readonly MerchantRule[];
+  history?: CategoryHistory; // categoria dada por último a cada comércio (lib/finance/categorize)
   householdDocs: ReadonlySet<string>; // CPFs da casa (só dígitos), só em memória
   institutions: ReadonlyMap<string, string>; // link de investimentos → nome do banco
   existing: ReadonlyMap<string, ExistingExternal>; // por externalId
@@ -105,7 +107,7 @@ export type NewTransaction = {
   invoice_ref: string | null;
 };
 
-export type TxPatch = { id: string; amount_cents?: number; occurred_on?: string; invoice_ref?: string | null };
+export type TxPatch = { id: string; amount_cents?: number; occurred_on?: string; invoice_ref?: string | null; category_id?: string };
 
 export type ExternalRow = {
   external_id: string;
@@ -227,8 +229,9 @@ export function planPluggySync(input: SyncInput): SyncPlan {
   const usedPayments = new Set<string>();
   const syncedLinkIds = new Set<string>();
 
+  const history = input.history;
   const pickCategory = (description: string, type: "expense" | "income") => {
-    const result = categorize(description, { categories, rules, type });
+    const result = categorize(description, { categories, rules, history, type });
     if (result.via !== "fallback" && result.categoryId) return result.categoryId;
     return type === "income" ? otherIncomeCategory : (result.categoryId ?? otherExpenseCategory);
   };
@@ -265,6 +268,10 @@ export function planPluggySync(input: SyncInput): SyncPlan {
             if (next.tx.amount_cents !== current.amountCents) patch.amount_cents = next.tx.amount_cents;
             if (next.tx.occurred_on !== current.occurredOn) patch.occurred_on = next.tx.occurred_on;
             if (next.tx.invoice_ref !== current.invoiceRef) patch.invoice_ref = next.tx.invoice_ref;
+            // Ainda em "Outros"/"Outras receitas" e agora dá para saber a categoria (histórico, regra):
+            // reclassifica. Categoria escolhida pela pessoa (qualquer outra) nunca é trocada.
+            const isFallback = current.categoryId === null || current.categoryId === otherExpenseCategory || current.categoryId === otherIncomeCategory;
+            if (isFallback && next.tx.category_id && next.tx.category_id !== current.categoryId) patch.category_id = next.tx.category_id;
             if (Object.keys(patch).length > 1) {
               plan.updates.push(patch);
               plan.counts.updated++;
@@ -432,7 +439,7 @@ export function planPluggySync(input: SyncInput): SyncPlan {
               ? feeCategory
               : type === "income"
                 ? (() => {
-                    const result = categorize(tx.description, { categories, rules, type: "income" });
+                    const result = categorize(tx.description, { categories, rules, history, type: "income" });
                     return result.via !== "fallback" && result.categoryId ? result.categoryId : (refundCategory ?? otherIncomeCategory);
                   })()
                 : pickCategory(tx.description, "expense");

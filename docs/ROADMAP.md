@@ -219,7 +219,7 @@ Sincronização por webhook/cron (também mantém o Supabase gratuito ativo).
       e aviso de dinheiro parado fora da caixinha
 - [ ] Etapa 3 — virada (pela tela: Configurações → Bancos mostra o que sai de novembro em diante e pede
       confirmação), primeira sync e conferência com os apps dos bancos
-- [ ] Depois: marcar "estimada" × "fechada pelo banco" na seção da fatura em Transações; BB; tirar a B3
+- [ ] Depois: BB; tirar a B3 (marcar "estimada" × "fechada pelo banco" na fatura: desnecessário, o sistema já corrige sozinho)
 
 ---
 
