@@ -143,7 +143,9 @@ docs/ROADMAP.md
   lançamentos não-Pluggy do cartão com `invoice_ref` ≥ essa fatura.
 - `external_transactions` = dedup da sincronização (como o `import_hash`); lançamento excluído pelo
   usuário não volta. Fatura: a do banco (`billId` → vencimento → `invoiceByDueMonth`) quando fechada;
-  aberta = estimativa pelo melhor dia, corrigida quando o banco fecha.
+  aberta = estimativa pelo melhor dia, corrigida quando o banco fecha. **O fechamento vem do banco**
+  (`bill.billClosingDate`): a sync grava no cartão o melhor dia = dia seguinte ao último fechamento
+  (`learnedCycle`), e o que ainda não tem fatura do banco nunca cai numa fatura já fechada (vai para a seguinte).
 - Sincronização (`services/pluggy-sync.ts` → plano puro `importers/pluggy/plan.ts`): corrente do cofre:
   saída = despesa, entrada = receita (salário/rendimento reconhecidos); aplicação/resgate, pix entre CPFs
   da casa (CPFs só em memória) e débito de fatura → absorvidos. Cartão: compra/encargo = despesa,
@@ -161,6 +163,8 @@ docs/ROADMAP.md
 - Agenda: botão em Configurações → Bancos e Vercel Cron diário `/api/cron/pluggy-sync` (`vercel.json`,
   `Authorization: Bearer ${CRON_SECRET}`, cliente admin). Melhor dia sugerido por `suggestClosingDay`.
 - Cursor da `/v2/transactions`: `next` é o resto do caminho (`/v2/transactions{next}`), não o valor do cursor.
+- Compra internacional: `amount` vem na moeda original (ex.: USD); o valor em reais é
+  `amountInAccountCurrency`. Sempre usar `brlCents(tx)` (`importers/pluggy/plan.ts`).
 - Dados reais: nada de log de conteúdo; testes e fixtures só com dados inventados.
 
 ## Tela Transações (o mês manda em tudo)

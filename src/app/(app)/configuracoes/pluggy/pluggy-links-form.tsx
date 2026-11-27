@@ -179,11 +179,11 @@ export function PluggyLinksForm({
 }
 
 // Melhor dia de compra visto nas faturas fechadas do banco × o cadastrado no cartão.
-function ClosingDayHint({ suggested, current, accountId }: { suggested: number; current: number | null; accountId: string | null }) {
+function ClosingDayHint({ suggested, current }: { suggested: number; current: number | null; accountId: string | null }) {
   const matches = current === suggested;
   return (
     <p className="basis-full pl-8 text-[12px] text-muted-foreground">
-      Pelas faturas do banco, o melhor dia de compra é <span className="font-mono">{suggested}</span>
+      Pelo último fechamento do banco, o melhor dia de compra é <span className="font-mono">{suggested}</span>
       {current ? (
         <>
           {" "}
@@ -192,11 +192,7 @@ function ClosingDayHint({ suggested, current, accountId }: { suggested: number; 
       ) : (
         ". "
       )}
-      {!matches && accountId ? (
-        <Link href={`/configuracoes/contas/${accountId}`} className="font-medium text-primary underline-offset-4 hover:underline">
-          Ajustar no cartão
-        </Link>
-      ) : null}
+      {!matches ? "A próxima sincronização ajusta o cartão sozinha." : null}
     </p>
   );
 }

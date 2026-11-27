@@ -75,7 +75,9 @@ export const transactionSchema = z.object({
   accountId: z.string(),
   date: z.string(),
   description: z.string(),
-  amount: z.number(),
+  amount: z.number(), // na moeda ORIGINAL (ex.: USD numa compra internacional)
+  currencyCode: nullish(z.string()),
+  amountInAccountCurrency: nullish(z.number()), // em reais (moeda da conta), quando a original é outra
   type: z.enum(["DEBIT", "CREDIT"]),
   status: nullish(z.enum(["PENDING", "POSTED"])),
   category: nullish(z.string()),
@@ -101,6 +103,7 @@ export const transactionSchema = z.object({
 export const billSchema = z.object({
   id: z.string(),
   dueDate: z.string(),
+  billClosingDate: nullish(z.string()), // dia em que o banco fechou a fatura
   totalAmount: nullish(z.number()),
 });
 

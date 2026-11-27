@@ -1,4 +1,4 @@
-import { type CardCycle, invoiceByDueMonth, invoiceFor, paymentInvoiceRef } from "@/lib/finance/billing";
+import { addMonthsToRef, type CardCycle, invoiceByDueMonth, invoiceFor, paymentInvoiceRef } from "@/lib/finance/billing";
 import { categorize, findCategoryByName, type MerchantRule } from "@/lib/finance/categorize";
 import { addDays, addMonthsToDate } from "@/lib/finance/dates";
 import type { PluggyRole, PluggySourceKind } from "@/lib/finance/pluggy-links";
@@ -22,6 +22,11 @@ import type { PluggyBill, PluggyInvestment, PluggyTransaction } from "@/lib/plug
 // - Lançamento excluído pelo usuário não volta; categoria e pessoa editadas não são sobrescritas.
 
 const toCents = (value: number) => Math.round(value * 100);
+
+// Valor em reais. Compra internacional: `amount` vem na moeda original (ex.: US$ 10,08) e o valor
+// cobrado em reais em `amountInAccountCurrency` (R$ 63,00). O sinal é sempre o de `amount`.
+export const brlCents = (tx: Pick<PluggyTransaction, "amount" | "amountInAccountCurrency">) =>
+  toCents(Math.abs(tx.amountInAccountCurrency ?? tx.amount));
 const day = (iso: string) => iso.slice(0, 10);
 
 export type SyncLink = {
@@ -129,11 +134,28 @@ export type SyncPlan = {
   externals: ExternalRow[];
   externalDeletes: string[];
   accountBalances: { accountId: string; cents: number }[];
+  // Melhor dia de compra aprendido do banco (dia seguinte ao último fechamento), quando mudou.
+  cardClosingDays: { accountId: string; closingDay: number }[];
   linkBalances: { linkId: string; cents: number | null }[];
   investments: InvestmentUpsert[];
   warnings: string[];
   counts: { created: number; updated: number; deleted: number; absorbed: number; reconciled: number; uncategorized: number };
 };
+
+const maxRef = (a: string, b: string | null) => (b && b > a ? b : a);
+
+// Ciclo aprendido das faturas fechadas do banco: a última fechada (pela data de vencimento) e o
+// melhor dia = dia seguinte ao fechamento dela. null se o banco não informou fechamento.
+export function learnedCycle(
+  bills: readonly PluggyBill[],
+  card: CardCycle,
+): { lastClosedRef: string; closingDay: number } | null {
+  const last = [...bills].sort((a, b) => a.dueDate.localeCompare(b.dueDate)).at(-1);
+  if (!last) return null;
+  const lastClosedRef = invoiceByDueMonth(day(last.dueDate).slice(0, 7), card).ref;
+  if (!last.billClosingDate) return { lastClosedRef, closingDay: card.closingDay };
+  return { lastClosedRef, closingDay: Number(addDays(day(last.billClosingDate), 1).slice(8, 10)) };
+}
 
 // Primeira fatura que vem da Pluggy num cartão: a que contém a data do corte.
 export const pluggyCardStartRef = (startDate: string, card: CardCycle) => invoiceFor(startDate, card).ref;
@@ -195,6 +217,7 @@ export function planPluggySync(input: SyncInput): SyncPlan {
     externalDeletes: [],
     accountBalances: [],
     linkBalances: [],
+    cardClosingDays: [],
     investments: [],
     warnings: [],
     counts: { created: 0, updated: 0, deleted: 0, absorbed: 0, reconciled: 0, uncategorized: 0 },
@@ -214,7 +237,7 @@ export function planPluggySync(input: SyncInput): SyncPlan {
   for (const source of input.data) {
     if (source.kind !== "card") continue;
     for (const tx of source.transactions) {
-      if (isCardPayment(tx)) cardPayments.push({ amountCents: toCents(Math.abs(tx.amount)), date: day(tx.date) });
+      if (isCardPayment(tx)) cardPayments.push({ amountCents: brlCents(tx), date: day(tx.date) });
     }
   }
 
@@ -287,7 +310,7 @@ export function planPluggySync(input: SyncInput): SyncPlan {
       for (const tx of source.transactions) {
         if (day(tx.date) < startDate) continue;
         record(tx, link, null, () => {
-          const amountCents = toCents(Math.abs(tx.amount));
+          const amountCents = brlCents(tx);
           const doc = counterpartDoc(tx);
           if (isInvestmentMove(tx) || (doc && input.householdDocs.has(doc))) return { status: "absorbed" };
           if (tx.type === "DEBIT") {
@@ -339,6 +362,13 @@ export function planPluggySync(input: SyncInput): SyncPlan {
         continue;
       }
       const bills = new Map(source.bills.map((b) => [b.id, b]));
+      // O fechamento vem do banco: o melhor dia da estimativa é o dia seguinte ao último fechamento
+      // informado (varia de mês a mês), e nada sem fatura do banco cai numa fatura já fechada.
+      const learned = learnedCycle(source.bills, card);
+      const estimateCycle = learned ? { ...card, closingDay: learned.closingDay } : card;
+      if (learned && learned.closingDay !== card.closingDay) {
+        plan.cardClosingDays.push({ accountId: card.accountId, closingDay: learned.closingDay });
+      }
       // No cartão o corte é pela FATURA: entra tudo da fatura que contém startDate em diante
       // (compras do fim do mês anterior que o banco pôs nela, ex.: 26 a 31/10 na de novembro).
       const startRef = pluggyCardStartRef(startDate, card);
@@ -347,10 +377,12 @@ export function planPluggySync(input: SyncInput): SyncPlan {
         const meta = tx.creditCardMetadata;
         const bill = meta?.billId ? bills.get(meta.billId) : undefined;
         const billId = bill ? bill.id : null;
-        const amountCents = toCents(Math.abs(tx.amount));
+        const amountCents = brlCents(tx);
         const last4 = meta?.cardNumber?.replace(/\D/g, "").slice(-4) || null;
         // Fatura do banco (billId → vencimento) quando fechada; senão a estimada pelo melhor dia.
-        const invoiceRef = bill ? invoiceByDueMonth(day(bill.dueDate).slice(0, 7), card).ref : invoiceFor(occurredOn, card).ref;
+        const invoiceRef = bill
+          ? invoiceByDueMonth(day(bill.dueDate).slice(0, 7), card).ref
+          : maxRef(invoiceFor(occurredOn, estimateCycle).ref, learned ? addMonthsToRef(learned.lastClosedRef, 1) : null);
 
         if (isCardPayment(tx)) {
           // Pagamento: pela data (o de antes do corte paga uma fatura que já estava no sistema).

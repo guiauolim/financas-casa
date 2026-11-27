@@ -274,6 +274,18 @@ async function applyPlan(db: Db, plan: SyncPlan, { householdId, userId }: { hous
     throwIf(error);
   }
 
+  // 5b. Melhor dia de compra aprendido do banco (dia seguinte ao último fechamento). Só a
+  // estimativa da fatura aberta usa; as faturas gravadas não mudam por isso.
+  for (const { accountId, closingDay } of plan.cardClosingDays) {
+    const { error } = await db
+      .from("accounts")
+      .update({ closing_day: closingDay })
+      .eq("household_id", householdId)
+      .eq("id", accountId)
+      .eq("kind", "credit_card");
+    throwIf(error);
+  }
+
   // 6. Investimentos: um ativo por título (upsert por dono + external_id) e o snapshot do dia.
   if (plan.investments.length > 0) {
     const { data: saved, error } = await db
