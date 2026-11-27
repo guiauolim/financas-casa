@@ -9,12 +9,13 @@ const TABS = [
   { href: "/configuracoes/regras", label: "Regras de categoria" },
   { href: "/configuracoes/membros", label: "Membros da casa" },
   { href: "/configuracoes/pluggy", label: "Bancos (Pluggy)" },
+  { href: "/configuracoes/senha", label: "Senha" },
 ] as const;
 
 export default function ConfiguracoesLayout({ children }: LayoutProps<"/configuracoes">) {
   return (
     <>
-      <PageHeader title="Configurações" description="Contas, cartões, contas fixas, categorias, regras de categoria, membros da casa e bancos." />
+      <PageHeader title="Configurações" description="Contas, cartões, contas fixas, categorias, regras de categoria, membros da casa, bancos e senha." />
       <Suspense fallback={<SubNavSkeleton items={TABS} />}>
         <SubNav label="Seções das configurações" items={TABS} />
       </Suspense>
