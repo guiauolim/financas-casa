@@ -1,12 +1,15 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { otpErrorMessage } from "@/lib/auth/otp-errors";
+import { passwordLoginErrorMessage, passwordLoginSchema } from "@/lib/auth/password";
 import { siteUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 import { loginSchema } from "@/lib/validation/onboarding";
 
 export type LoginState = { status: "idle" | "sent" | "error"; message?: string; email?: string };
 
+// Link por e-mail: primeiro acesso (convite) e "esqueci a senha".
 export async function sendMagicLink(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const parsed = loginSchema.safeParse({ email: formData.get("email") });
   if (!parsed.success) {
@@ -25,4 +28,21 @@ export async function sendMagicLink(_prev: LoginState, formData: FormData): Prom
   }
 
   return { status: "sent", email: parsed.data.email };
+}
+
+// E-mail e senha (depois que a pessoa criou a senha). Mensagem de erro sempre genérica.
+export async function signInWithPassword(_prev: LoginState, formData: FormData): Promise<LoginState> {
+  const parsed = passwordLoginSchema.safeParse({ email: formData.get("email"), password: formData.get("password") });
+  const email = typeof formData.get("email") === "string" ? String(formData.get("email")) : undefined;
+  if (!parsed.success) {
+    return { status: "error", message: parsed.error.issues[0]?.message ?? "Dados inválidos.", email };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signInWithPassword(parsed.data);
+  if (error) {
+    console.warn(`[login] signInWithPassword falhou: ${error.status ?? "?"} ${error.code ?? "sem código"}`);
+    return { status: "error", message: passwordLoginErrorMessage(error), email: parsed.data.email };
+  }
+  redirect("/dashboard");
 }

@@ -12,7 +12,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle className="text-[28px] font-bold tracking-tight">Finanças da Casa</CardTitle>
-          <CardDescription>Entre com seu e-mail. Vamos mandar um link de acesso, sem senha.</CardDescription>
+          <CardDescription>Entre com seu e-mail e senha. No primeiro acesso, use o link por e-mail.</CardDescription>
         </CardHeader>
         <CardContent>
           <Suspense fallback={<Skeleton className="h-[120px] w-full" />}>

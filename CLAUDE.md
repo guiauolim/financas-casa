@@ -14,7 +14,7 @@ importação de faturas (Itaú); dali para frente, pelo WhatsApp.
 - **Next.js 16 (App Router) + TypeScript (strict)** — hospedado na **Vercel**. Cache Components e
   Partial Prefetching ligados (ver "Next.js 16 — armadilhas")
 - **Tailwind + shadcn/ui** para UI; **Recharts** para gráficos
-- **Supabase**: Postgres, Auth (magic link por e-mail), RLS obrigatório
+- **Supabase**: Postgres, Auth (e-mail + senha; link por e-mail no 1º acesso e no "esqueci a senha"), RLS obrigatório
 - **WhatsApp Cloud API (oficial da Meta)** — webhook em `/api/whatsapp/webhook`
 - **Vercel AI SDK** (`ai` + `@ai-sdk/openai`, opcional `@ai-sdk/anthropic`) com *tool calling* para
   interpretar mensagens. Provedor e modelo escolhidos por env (`AI_PROVIDER`, `AI_MODEL`) — começar com OpenAI
@@ -27,8 +27,9 @@ importação de faturas (Itaú); dali para frente, pelo WhatsApp.
 ```
 src/
   app/
-    (auth)/login/            # magic link
-    auth/confirm/route.ts    # destino dos links de e-mail (token_hash → verifyOtp)
+    (auth)/login/            # e-mail + senha; "Receber link por e-mail" (1º acesso / esqueci a senha)
+    auth/confirm/route.ts    # destino dos links de e-mail (token_hash → verifyOtp); sem senha → /senha
+    senha/                   # criar senha depois do link (fora do layout do app); trocar em Configurações → Senha
     auth/signout/route.ts
     onboarding/              # 1º login: cria a casa ou aceita convite; /onboarding/convite
     (app)/dashboard/         # visão geral: "Todos os meses" (padrão, sem ?mes; até o mês atual) ou um mês
