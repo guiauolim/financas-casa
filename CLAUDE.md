@@ -163,6 +163,8 @@ docs/ROADMAP.md
 - Agenda: botão em Configurações → Bancos e Vercel Cron diário `/api/cron/pluggy-sync` (`vercel.json`,
   `Authorization: Bearer ${CRON_SECRET}`, cliente admin). Melhor dia sugerido por `suggestClosingDay`.
 - Cursor da `/v2/transactions`: `next` é o resto do caminho (`/v2/transactions{next}`), não o valor do cursor.
+- Compra internacional: `amount` vem na moeda original (ex.: USD); o valor em reais é
+  `amountInAccountCurrency`. Sempre usar `brlCents(tx)` (`importers/pluggy/plan.ts`).
 - Dados reais: nada de log de conteúdo; testes e fixtures só com dados inventados.
 
 ## Tela Transações (o mês manda em tudo)

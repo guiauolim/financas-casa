@@ -245,6 +245,31 @@ describe("cartão", () => {
     expect(plan.cardClosingDays).toEqual([{ accountId: CARTAO, closingDay: 27 }]);
   });
 
+  it("compra internacional usa o valor em reais (e corrige a que entrou em dólar)", () => {
+    const usd = cardTx({
+      id: "usd",
+      amount: 10.08,
+      currencyCode: "USD",
+      amountInAccountCurrency: 63,
+      date: "2026-11-20T12:00:00Z",
+      creditCardMetadata: { billId: "b-nov" },
+    });
+    const bills = [{ id: "b-nov", dueDate: "2026-12-03T00:00:00Z" }];
+    const first = planPluggySync(input([cardData([usd], bills)]));
+    expect(first.inserts[0]?.amount_cents).toBe(6300);
+
+    // Já gravada com o valor em dólar (versão anterior): a próxima sync corrige para reais.
+    const id = pluggyTxId(HH, "usd");
+    const existing = new Map<string, ExistingExternal>([
+      ["usd", { externalId: "usd", status: "linked", transactionId: id, providerStatus: "POSTED", billId: "b-nov", linkId: "l-cartao" }],
+    ]);
+    const existingTx = new Map<string, ExistingTx>([
+      [id, { id, source: "pluggy", type: "expense", amountCents: 1008, occurredOn: "2026-11-20", accountId: CARTAO, transferAccountId: null, invoiceRef: "2026-11" }],
+    ]);
+    const second = planPluggySync(input([cardData([usd], bills)], { existing, existingTx }));
+    expect(second.updates).toEqual([{ id, amount_cents: 6300 }]);
+  });
+
   it("parcelas da mesma compra no mesmo grupo; estorno vira receita", () => {
     const meta = (n: number) => ({ installmentNumber: n, totalInstallments: 3, purchaseDate: "2026-10-20T00:00:00Z" });
     const plan = planPluggySync(

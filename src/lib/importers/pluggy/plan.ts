@@ -22,6 +22,11 @@ import type { PluggyBill, PluggyInvestment, PluggyTransaction } from "@/lib/plug
 // - Lançamento excluído pelo usuário não volta; categoria e pessoa editadas não são sobrescritas.
 
 const toCents = (value: number) => Math.round(value * 100);
+
+// Valor em reais. Compra internacional: `amount` vem na moeda original (ex.: US$ 10,08) e o valor
+// cobrado em reais em `amountInAccountCurrency` (R$ 63,00). O sinal é sempre o de `amount`.
+export const brlCents = (tx: Pick<PluggyTransaction, "amount" | "amountInAccountCurrency">) =>
+  toCents(Math.abs(tx.amountInAccountCurrency ?? tx.amount));
 const day = (iso: string) => iso.slice(0, 10);
 
 export type SyncLink = {
@@ -232,7 +237,7 @@ export function planPluggySync(input: SyncInput): SyncPlan {
   for (const source of input.data) {
     if (source.kind !== "card") continue;
     for (const tx of source.transactions) {
-      if (isCardPayment(tx)) cardPayments.push({ amountCents: toCents(Math.abs(tx.amount)), date: day(tx.date) });
+      if (isCardPayment(tx)) cardPayments.push({ amountCents: brlCents(tx), date: day(tx.date) });
     }
   }
 
@@ -305,7 +310,7 @@ export function planPluggySync(input: SyncInput): SyncPlan {
       for (const tx of source.transactions) {
         if (day(tx.date) < startDate) continue;
         record(tx, link, null, () => {
-          const amountCents = toCents(Math.abs(tx.amount));
+          const amountCents = brlCents(tx);
           const doc = counterpartDoc(tx);
           if (isInvestmentMove(tx) || (doc && input.householdDocs.has(doc))) return { status: "absorbed" };
           if (tx.type === "DEBIT") {
@@ -372,7 +377,7 @@ export function planPluggySync(input: SyncInput): SyncPlan {
         const meta = tx.creditCardMetadata;
         const bill = meta?.billId ? bills.get(meta.billId) : undefined;
         const billId = bill ? bill.id : null;
-        const amountCents = toCents(Math.abs(tx.amount));
+        const amountCents = brlCents(tx);
         const last4 = meta?.cardNumber?.replace(/\D/g, "").slice(-4) || null;
         // Fatura do banco (billId → vencimento) quando fechada; senão a estimada pelo melhor dia.
         const invoiceRef = bill
