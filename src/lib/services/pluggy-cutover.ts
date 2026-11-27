@@ -1,11 +1,12 @@
 import "server-only";
 import { PLUGGY_START_DATE } from "@/lib/finance/pluggy-links";
+import { pluggyCardStartRef } from "@/lib/importers/pluggy/plan";
 import { ServiceError, throwIf } from "./errors";
 import { listPluggyLinks } from "./pluggy";
 import type { Actor, Db } from "./types";
 
 // Virada para a Pluggy: a partir de PLUGGY_START_DATE os lançamentos das contas ligadas vêm do
-// banco. Os lançados à mão/importados nessas contas a partir daí são substituídos — exceto os
+// banco (no cartão, a partir da fatura que contém essa data). Os lançados à mão/importados nessas contas a partir daí são substituídos — exceto os
 // pagamentos de fatura (transferência para um cartão ligado), que ficam para a conciliação.
 // Enquanto houver algo a substituir, a sincronização não roda (evita contar em dobro).
 
@@ -26,13 +27,32 @@ async function cutoverCandidates(db: Db, householdId: string) {
       .neq("source", "pluggy")
       .in("account_id", accountIds)
       .gte("occurred_on", PLUGGY_START_DATE),
-    db.from("accounts").select("id, name").eq("household_id", householdId).in("id", accountIds),
+    db.from("accounts").select("id, name, closing_day, due_day").eq("household_id", householdId).in("id", accountIds),
   ]);
   throwIf(error);
   throwIf(accountsError);
+
+  // Cartão: o corte é pela fatura. Compras de antes da data do corte que estão na 1ª fatura da
+  // Pluggy (ex.: 26 a 31/10 na fatura de novembro) também são substituídas pelas do banco.
+  const cardRows: { id: string; account_id: string; transfer_account_id: string | null; type: string }[] = [];
+  for (const account of (accounts ?? []).filter((a) => cardIds.has(a.id) && a.closing_day && a.due_day)) {
+    const startRef = pluggyCardStartRef(PLUGGY_START_DATE, { closingDay: account.closing_day!, dueDay: account.due_day! });
+    const { data, error: cardError } = await db
+      .from("transactions")
+      .select("id, account_id, transfer_account_id, type")
+      .eq("household_id", householdId)
+      .neq("source", "pluggy")
+      .neq("type", "transfer")
+      .eq("account_id", account.id)
+      .lt("occurred_on", PLUGGY_START_DATE)
+      .gte("invoice_ref", startRef);
+    throwIf(cardError);
+    cardRows.push(...(data ?? []));
+  }
+
   const isPayment = (t: { type: string; transfer_account_id: string | null }) =>
     t.type === "transfer" && t.transfer_account_id !== null && cardIds.has(t.transfer_account_id);
-  const rows = txs ?? [];
+  const rows = [...(txs ?? []), ...cardRows];
   return {
     candidates: rows.filter((t) => !isPayment(t)),
     keptPayments: rows.filter(isPayment).length,

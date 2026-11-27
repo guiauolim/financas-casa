@@ -138,6 +138,9 @@ docs/ROADMAP.md
   dois Nubank) + caixinha (CDBs)**; movimento entre elas é interno do cofre (não vira lançamento).
   Sugestão inicial e validação em `lib/finance/pluggy-links.ts`.
 - Corte: lançamentos da Pluggy só a partir de `PLUGGY_START_DATE` (01/11/2026); antes, o que já existia.
+  **No cartão o corte é pela fatura** (`pluggyCardStartRef`): entra tudo da fatura que contém essa data
+  (ex.: 26 a 31/10 na de novembro); pagamentos de fatura seguem pela data. A virada também substitui os
+  lançamentos não-Pluggy do cartão com `invoice_ref` ≥ essa fatura.
 - `external_transactions` = dedup da sincronização (como o `import_hash`); lançamento excluído pelo
   usuário não volta. Fatura: a do banco (`billId` → vencimento → `invoiceByDueMonth`) quando fechada;
   aberta = estimativa pelo melhor dia, corrigida quando o banco fecha.

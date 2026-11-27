@@ -129,8 +129,8 @@ function SyncPanel({
   if (cutover.total > 0) {
     return (
       <Panel
-        title="Antes da primeira sincronização"
-        description={`A partir de ${start} os lançamentos destas contas vêm do banco. Os lançados à mão ou importados a partir dessa data serão substituídos pelos do banco (o que é de antes fica como está).`}
+        title="Antes de sincronizar"
+        description={`A partir de ${start} os lançamentos destas contas vêm do banco (nos cartões, desde a fatura que contém essa data — inclusive as compras do fim do mês anterior que o banco pôs nela). Os lançados à mão ou importados nesse período serão substituídos pelos do banco; o que é de antes fica como está.`}
       >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
