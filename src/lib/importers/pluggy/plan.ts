@@ -200,7 +200,6 @@ const assetClassOf = (inv: PluggyInvestment): InvestmentUpsert["asset_class"] =>
 export function planPluggySync(input: SyncInput): SyncPlan {
   const { householdId, startDate, categories, rules, existing, existingTx } = input;
   const linksById = new Map(input.links.map((l) => [l.id, l]));
-  const byId = new Map(categories.map((c) => [c.id, c]));
   const usable = categories.filter((c) => !c.archived);
   const category = (type: "expense" | "income", name: string) =>
     findCategoryByName(usable.filter((c) => c.type === type), name)?.id ?? null;

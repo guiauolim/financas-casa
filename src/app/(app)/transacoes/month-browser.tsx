@@ -194,20 +194,29 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
       return next;
     });
 
-  // Seções recolhidas (por id: cartão, "despesas", "receitas" ou "transferencias").
-  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  // Seções que a pessoa abriu/fechou (por id: cartão, "despesas", "receitas" ou "transferencias").
+  // As faturas dos cartões começam FECHADAS (só o resumo: Total/Pago/Falta); as outras, abertas.
+  const [toggled, setToggled] = useState<ReadonlySet<string>>(new Set());
   const toggleCollapsed = (id: string) =>
-    setCollapsed((current) => {
+    setToggled((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
+  const isCollapsed = (id: string, startsCollapsed = false) => toggled.has(id) !== startsCollapsed;
+  const collapsed = { has: (id: string) => isCollapsed(id) };
+  const cardCollapsed = (cardId: string) => isCollapsed(cardId, true);
 
-  // Link da Visão geral: /transacoes?mes=…#fatura-<cartão> rola até a fatura.
+  // Link da Visão geral: /transacoes?mes=…#fatura-<cartão> abre a fatura e rola até ela.
   useEffect(() => {
     const target = window.location.hash.slice(1);
-    if (target.startsWith("fatura-")) document.getElementById(target)?.scrollIntoView({ block: "start" });
+    if (!target.startsWith("fatura-")) return;
+    const frame = requestAnimationFrame(() => {
+      setToggled((current) => new Set(current).add(target.slice("fatura-".length)));
+      document.getElementById(target)?.scrollIntoView({ block: "start" });
+    });
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   const memberIndex = (userId: string | null) => options.members.findIndex((m) => m.userId === userId);
@@ -320,7 +329,7 @@ export function MonthBrowser({ initial, options }: { initial: TransactionsMonth;
                   today={data.today}
                   transactions={section.transactions}
                   filtered={hasFilters}
-                  collapsed={collapsed.has(section.cardId)}
+                  collapsed={cardCollapsed(section.cardId)}
                   onToggleCollapsed={() => toggleCollapsed(section.cardId)}
                   selection={selection}
                   onSelectAll={setMany}
