@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { securityHeaders } from "./src/lib/security/headers";
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
@@ -15,6 +16,14 @@ const nextConfig: NextConfig = {
         as: "*.css",
       },
     },
+  },
+  async headers() {
+    // CSP (Report-Only), HSTS, anti-iframe etc. em todas as respostas (lib/security/headers.ts).
+    const headers = securityHeaders({
+      supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      dev: process.env.NODE_ENV !== "production",
+    });
+    return [{ source: "/:path*", headers }];
   },
   async redirects() {
     return [

@@ -16,7 +16,6 @@ export function MemberForm({
   const prefix = `member-${member.userId.slice(0, 8)}`;
   return (
     <form action={action} className="flex flex-col gap-4" noValidate>
-      <input type="hidden" name="userId" value={member.userId} />
       <div className="grid gap-4 sm:grid-cols-2">
         <Field
           id={`${prefix}-name`}

@@ -42,7 +42,8 @@ src/
     api/cron/pluggy-sync/route.ts       # sync diário com a Pluggy (CRON_SECRET)
     api/cron/weekly-insights/route.ts   # Fase 8
   lib/
-    supabase/{server,client,admin}.ts   # admin = service role, SÓ server-side
+    supabase/{server,admin}.ts           # admin = service role, SÓ server-side. Sem cliente no navegador:
+    supabase/cookie-options.ts           # cookies da sessão HttpOnly + Secure (produção) + SameSite=Lax
     supabase/proxy.ts        # updateSession() usado por src/proxy.ts
     supabase/database.types.ts           # gerado por `pnpm db:types` — não editar à mão
     auth/{paths,session}.ts  # rotas públicas; getCurrentUser/getCurrentProfile

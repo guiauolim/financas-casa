@@ -430,11 +430,48 @@ export type Database = {
           },
         ]
       }
+      household_invite_sends: {
+        Row: {
+          household_id: string
+          id: number
+          sent_at: string
+          sent_by: string | null
+        }
+        Insert: {
+          household_id: string
+          id?: never
+          sent_at?: string
+          sent_by?: string | null
+        }
+        Update: {
+          household_id?: string
+          id?: never
+          sent_at?: string
+          sent_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "household_invite_sends_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "household_invite_sends_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
       household_invites: {
         Row: {
           accepted_at: string | null
           created_at: string
           email: string
+          expires_at: string
           household_id: string
           id: string
           invited_by: string | null
@@ -443,6 +480,7 @@ export type Database = {
           accepted_at?: string | null
           created_at?: string
           email: string
+          expires_at?: string
           household_id: string
           id?: string
           invited_by?: string | null
@@ -451,6 +489,7 @@ export type Database = {
           accepted_at?: string | null
           created_at?: string
           email?: string
+          expires_at?: string
           household_id?: string
           id?: string
           invited_by?: string | null

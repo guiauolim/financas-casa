@@ -6,7 +6,7 @@ import { MemberAvatar } from "@/components/member-avatar";
 import { ListSkeleton, Panel } from "@/components/panel";
 import { InviteMemberForm } from "@/app/onboarding/forms";
 import { requireActor } from "@/lib/auth/session";
-import { formatDate } from "@/lib/finance/dates";
+import { formatDate, todayInSaoPaulo } from "@/lib/finance/dates";
 import { formatPhone } from "@/lib/finance/phone";
 import { listMembers, listPendingInvites } from "@/lib/services/households";
 import { createClient } from "@/lib/supabase/server";
@@ -39,7 +39,7 @@ async function Members() {
   const actor = await requireActor();
   const members = await listMembers(await createClient(), { householdId: actor.householdId });
   return (
-    <Panel title="Membros" description="Nome que aparece nos lançamentos e telefone do WhatsApp de cada pessoa.">
+    <Panel title="Membros" description="Nome que aparece nos lançamentos e telefone do WhatsApp de cada pessoa. Cada um edita os próprios dados.">
       <ul className="flex flex-col divide-y divide-divider">
         {members.map((member, index) => (
           <li key={member.userId} className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0">
@@ -50,13 +50,21 @@ async function Members() {
                 {member.userId === actor.userId ? <span className="text-muted-foreground"> (você)</span> : null}
               </p>
             </div>
-            <MemberForm
-              member={{
-                userId: member.userId,
-                displayName: member.displayName,
-                phoneDisplay: member.phoneE164 ? formatPhone(member.phoneE164) : "",
-              }}
-            />
+            {member.userId === actor.userId ? (
+              <MemberForm
+                member={{
+                  userId: member.userId,
+                  displayName: member.displayName,
+                  phoneDisplay: member.phoneE164 ? formatPhone(member.phoneE164) : "",
+                }}
+              />
+            ) : (
+              // Cada pessoa edita só os próprios dados (nome e WhatsApp).
+              <p className="text-[13px] text-muted-foreground">
+                WhatsApp: {member.phoneE164 ? <span className="font-mono">{formatPhone(member.phoneE164)}</span> : "não cadastrado"}
+                {" · "}só {member.displayName} pode alterar.
+              </p>
+            )}
           </li>
         ))}
       </ul>
@@ -78,7 +86,8 @@ async function PendingInvites() {
               <div className="flex min-w-0 flex-1 flex-col">
                 <p className="truncate font-medium">{invite.email}</p>
                 <p className="text-[13px] text-muted-foreground">
-                  Enviado em {formatDate(invite.createdAt.slice(0, 10))}
+                  Enviado em {formatDate(invite.createdAt.slice(0, 10))} · vale até{" "}
+                  {formatDate(todayInSaoPaulo(new Date(invite.expiresAt)))}
                 </p>
               </div>
               <ConfirmAction

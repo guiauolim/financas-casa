@@ -2,11 +2,13 @@
 
 import { refresh } from "next/cache";
 import { redirect } from "next/navigation";
+import { serviceErrorState } from "@/lib/actions";
 import { getCurrentProfile, getCurrentUser } from "@/lib/auth/session";
 import { acceptPendingInvite, createHousehold, inviteMember } from "@/lib/services/households";
 import { siteUrl } from "@/lib/site-url";
 import { createClient } from "@/lib/supabase/server";
 import { fieldErrors, type FormState } from "@/lib/validation/form";
+import { inviteSentMessage } from "@/lib/validation/invites";
 import { acceptInviteSchema, createHouseholdSchema, inviteMemberSchema } from "@/lib/validation/onboarding";
 
 export type { FormState };
@@ -50,20 +52,15 @@ export async function inviteMemberAction(_prev: FormState, formData: FormData): 
   if (!parsed.success) return { fieldErrors: fieldErrors(parsed.error.issues) };
 
   try {
-    const result = await inviteMember(await createClient(), {
+    await inviteMember(await createClient(), {
       householdId: profile.householdId,
       userId: profile.userId,
       email: parsed.data.email,
       redirectTo: `${siteUrl()}/onboarding`,
     });
     refresh(); // atualiza a lista de convites pendentes em Configurações → Membros
-    return {
-      success:
-        result === "invited"
-          ? `Convite enviado para ${parsed.data.email}.`
-          : `${parsed.data.email} já tem conta. Peça para entrar no site: o convite aparece no primeiro acesso.`,
-    };
-  } catch {
-    return { error: "Não foi possível enviar o convite. Tente novamente." };
+    return { success: inviteSentMessage(parsed.data.email) };
+  } catch (error) {
+    return serviceErrorState(error, "Não foi possível enviar o convite. Tente novamente.");
   }
 }
