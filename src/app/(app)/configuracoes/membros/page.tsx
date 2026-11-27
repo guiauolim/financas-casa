@@ -6,7 +6,7 @@ import { MemberAvatar } from "@/components/member-avatar";
 import { ListSkeleton, Panel } from "@/components/panel";
 import { InviteMemberForm } from "@/app/onboarding/forms";
 import { requireActor } from "@/lib/auth/session";
-import { formatDate } from "@/lib/finance/dates";
+import { formatDate, todayInSaoPaulo } from "@/lib/finance/dates";
 import { formatPhone } from "@/lib/finance/phone";
 import { listMembers, listPendingInvites } from "@/lib/services/households";
 import { createClient } from "@/lib/supabase/server";
@@ -86,7 +86,8 @@ async function PendingInvites() {
               <div className="flex min-w-0 flex-1 flex-col">
                 <p className="truncate font-medium">{invite.email}</p>
                 <p className="text-[13px] text-muted-foreground">
-                  Enviado em {formatDate(invite.createdAt.slice(0, 10))}
+                  Enviado em {formatDate(invite.createdAt.slice(0, 10))} · vale até{" "}
+                  {formatDate(todayInSaoPaulo(new Date(invite.expiresAt)))}
                 </p>
               </div>
               <ConfirmAction

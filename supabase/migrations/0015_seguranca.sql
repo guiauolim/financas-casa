@@ -43,3 +43,91 @@ end $$;
 create trigger external_transactions_same_household
   before insert or update of household_id, link_id, transaction_id on external_transactions
   for each row execute function check_external_transaction_household();
+
+-- ───────────────────────── M2: convites ─────────────────────────
+-- Convite vale 7 dias (reenviar renova) e cada casa manda no máximo 5 convites por dia (cada envio
+-- dispara um e-mail do Supabase Auth). O site no ar continua funcionando: ele não preenche
+-- expires_at (vale o padrão) e não usa household_invite_sends.
+alter table household_invites
+  add column expires_at timestamptz not null default (now() + interval '7 days');
+-- Os pendentes de hoje ganham 7 dias a partir de agora.
+update household_invites set expires_at = now() + interval '7 days' where accepted_at is null;
+
+create or replace function get_pending_invite()
+returns table (invite_id uuid, household_id uuid, household_name text)
+language sql stable security definer set search_path = public as $$
+  select i.id, h.id, h.name
+  from household_invites i
+  join households h on h.id = i.household_id
+  where i.accepted_at is null
+    and i.expires_at > now()
+    and i.email = (auth.jwt() ->> 'email')::citext
+  order by i.created_at desc
+  limit 1;
+$$;
+
+create or replace function accept_household_invite(p_display_name text)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_uid uuid := auth.uid();
+  v_email citext := (auth.jwt() ->> 'email')::citext;
+  v_invite household_invites%rowtype;
+begin
+  if v_uid is null or v_email is null then
+    raise exception 'not authenticated' using errcode = '28000';
+  end if;
+  if exists (select 1 from profiles where user_id = v_uid) then
+    raise exception 'profile already exists' using errcode = '23505';
+  end if;
+  if char_length(trim(coalesce(p_display_name, ''))) not between 1 and 80 then
+    raise exception 'invalid name' using errcode = '22023';
+  end if;
+
+  select * into v_invite from household_invites
+  where email = v_email and accepted_at is null and expires_at > now()
+  order by created_at desc
+  limit 1
+  for update;
+  if not found then
+    raise exception 'no pending invite' using errcode = 'P0002';
+  end if;
+
+  insert into profiles (user_id, household_id, display_name)
+  values (v_uid, v_invite.household_id, trim(p_display_name));
+  update household_invites set accepted_at = now() where id = v_invite.id;
+  return v_invite.household_id;
+end $$;
+
+-- Um registro por e-mail de convite enviado: o limite vale até para quem chamar a API direto.
+create table household_invite_sends (
+  id bigint generated always as identity primary key,
+  household_id uuid not null references households(id) on delete cascade,
+  sent_by uuid default auth.uid() references profiles(user_id) on delete set null,
+  sent_at timestamptz not null default now()
+);
+create index household_invite_sends_recent_idx on household_invite_sends (household_id, sent_at desc);
+
+alter table household_invite_sends enable row level security;
+create policy household_invite_sends_household on household_invite_sends for all
+  using (is_household_member(household_id)) with check (is_household_member(household_id));
+-- Só inserir e ler: o histórico não se apaga nem se edita pela API.
+revoke update, delete on household_invite_sends from anon, authenticated;
+
+create or replace function check_invite_send_limit()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  new.sent_at := now(); -- não dá para "voltar no tempo" e furar o limite
+  -- Envios simultâneos da mesma casa contam um de cada vez.
+  perform pg_advisory_xact_lock(hashtext('invite_sends:' || new.household_id::text));
+  if (
+    select count(*) from household_invite_sends
+    where household_id = new.household_id and sent_at > now() - interval '1 day'
+  ) >= 5 then
+    raise exception 'invite limit reached' using errcode = 'P0429';
+  end if;
+  return new;
+end $$;
+
+create trigger household_invite_sends_limit
+  before insert on household_invite_sends
+  for each row execute function check_invite_send_limit();

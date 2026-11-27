@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { INVITE_LIMIT_MESSAGE, inviteExpiresAt } from "@/lib/validation/invites";
 import type { MemberInput } from "@/lib/validation/members";
 import type { AcceptInviteInput, CreateHouseholdInput } from "@/lib/validation/onboarding";
 import { isUniqueViolation, ServiceError, supabaseError, throwIf } from "./errors";
@@ -52,30 +53,29 @@ export async function acceptPendingInvite(db: Db, input: AcceptInviteInput): Pro
   return data;
 }
 
-export type InviteResult = "invited" | "existing_user";
-
-// Registra o convite (RLS garante que quem convida é membro da casa) e manda o
-// e-mail de convite do Supabase Auth. Se a pessoa já tem conta, o convite fica
-// registrado e é aceito no próximo login dela pelo onboarding.
+// Registra o convite (RLS garante que quem convida é membro da casa) e manda o e-mail de convite
+// do Supabase Auth. Se a pessoa já tem conta, o convite fica registrado e é aceito no próximo
+// login dela pelo onboarding. Não devolve se a pessoa já tinha conta (evita enumeração de
+// e-mails). Vale 7 dias (reenviar renova); no máximo 5 envios por casa por dia (trigger da 0015).
 export async function inviteMember(
   db: Db,
   params: { householdId: string; userId: string; email: string; redirectTo: string },
-): Promise<InviteResult> {
-  const { error } = await db
-    .from("household_invites")
-    .upsert(
-      { household_id: params.householdId, email: params.email, invited_by: params.userId },
-      { onConflict: "household_id,email", ignoreDuplicates: true },
-    );
+): Promise<void> {
+  const { error: limitError } = await db.from("household_invite_sends").insert({ household_id: params.householdId });
+  if (limitError?.code === "P0429") throw new ServiceError(INVITE_LIMIT_MESSAGE);
+  throwIf(limitError);
+
+  const { error } = await db.from("household_invites").upsert(
+    { household_id: params.householdId, email: params.email, invited_by: params.userId, expires_at: inviteExpiresAt() },
+    { onConflict: "household_id,email" },
+  );
   throwIf(error);
 
   const admin = createAdminClient();
   const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(params.email, {
     redirectTo: params.redirectTo,
   });
-  if (inviteError?.code === "email_exists") return "existing_user";
-  if (inviteError) throw inviteError;
-  return "invited";
+  if (inviteError && inviteError.code !== "email_exists") throw inviteError;
 }
 
 export type Member = { userId: string; displayName: string; phoneE164: string | null; createdAt: string };
@@ -112,17 +112,18 @@ export async function updateMember(
   if (!data?.length) throw new ServiceError("Membro não encontrado.");
 }
 
-export type PendingInvite = { id: string; email: string; createdAt: string };
+export type PendingInvite = { id: string; email: string; createdAt: string; expiresAt: string };
 
 export async function listPendingInvites(db: Db, { householdId }: { householdId: string }): Promise<PendingInvite[]> {
   const { data, error } = await db
     .from("household_invites")
-    .select("id, email, created_at")
+    .select("id, email, created_at, expires_at")
     .eq("household_id", householdId)
     .is("accepted_at", null)
+    .gt("expires_at", new Date().toISOString())
     .order("created_at", { ascending: false });
   throwIf(error);
-  return (data ?? []).map((row) => ({ id: row.id, email: row.email, createdAt: row.created_at }));
+  return (data ?? []).map((row) => ({ id: row.id, email: row.email, createdAt: row.created_at, expiresAt: row.expires_at }));
 }
 
 // Cancelar só apaga o registro: o e-mail já enviado continua válido para login,
