@@ -165,6 +165,8 @@ docs/ROADMAP.md
 - Cursor da `/v2/transactions`: `next` é o resto do caminho (`/v2/transactions{next}`), não o valor do cursor.
 - Compra internacional: `amount` vem na moeda original (ex.: USD); o valor em reais é
   `amountInAccountCurrency`. Sempre usar `brlCents(tx)` (`importers/pluggy/plan.ts`).
+- De quem é (Pluggy): o dono do login ("De quem é este login" em Configurações → Bancos); no cartão, o
+  dono do final (`card_holders`). Vale para todas as categorias (as "da casa" não viram Casa aqui).
 - Dados reais: nada de log de conteúdo; testes e fixtures só com dados inventados.
 
 ## Tela Transações (o mês manda em tudo)
@@ -253,6 +255,7 @@ docs/ROADMAP.md
 - Migrations novas em `supabase/migrations/NNNN_nome.sql`; aplicar com `pnpm supabase db push --remote`
   (conferir antes com `--remote --dry-run`) e depois `pnpm db:types`. Nunca editar uma migration já aplicada.
   CLI 3: sem `--remote` o `db push`/`migration list` miram o banco **local** (não temos: só dá erro de conexão).
+  Em produção a CLI pede confirmação; num agente ela recusa e pede `--yes`, que só se usa com o OK do usuário.
 - O banco é aplicado antes do deploy: toda migration em `migrations/` tem que ser compatível com o
   código que está em produção. O que quebra o código antigo (remover coluna etc.) fica em
   `supabase/pending/` e só entra depois do merge e do deploy.

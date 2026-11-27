@@ -106,7 +106,7 @@ describe("conta corrente do cofre", () => {
       ]),
     );
     expect(plan.inserts.map((t) => [t.type, t.amount_cents, t.category_id, t.spent_by])).toEqual([
-      ["expense", 5230, "c-mercado", null], // categoria da casa → Casa
+      ["expense", 5230, "c-mercado", ANA], // dono do login, mesmo em categoria "da casa"
       ["income", 500000, "c-salario", ANA],
       ["income", 123, "c-rend", ANA],
     ]);
@@ -268,6 +268,20 @@ describe("cartão", () => {
     ]);
     const second = planPluggySync(input([cardData([usd], bills)], { existing, existingTx }));
     expect(second.updates).toEqual([{ id, amount_cents: 6300 }]);
+  });
+
+  it("de quem é: dono do final do cartão; sem final cadastrado, o dono do login", () => {
+    const plan = planPluggySync(
+      input([
+        cardData([
+          cardTx({ id: "final-bia", amount: 10, creditCardMetadata: { cardNumber: "1234" } }), // final da Bia
+          cardTx({ id: "final-novo", amount: 20, creditCardMetadata: { cardNumber: "9999" } }), // sem cadastro
+        ]),
+      ]),
+    );
+    const who = new Map(plan.inserts.map((t) => [t.id, t.spent_by]));
+    expect(who.get(pluggyTxId(HH, "final-bia"))).toBe(BIA);
+    expect(who.get(pluggyTxId(HH, "final-novo"))).toBe(ANA); // dono do login do cartão
   });
 
   it("parcelas da mesma compra no mesmo grupo; estorno vira receita", () => {
