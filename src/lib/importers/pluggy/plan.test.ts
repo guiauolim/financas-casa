@@ -191,7 +191,6 @@ describe("cartão", () => {
           [
             cardTx({ id: "out-20", amount: 10, date: "2026-10-20T12:00:00Z", creditCardMetadata: { billId: "b-out" } }),
             cardTx({ id: "out-28-banco", amount: 20, date: "2026-10-28T12:00:00Z", creditCardMetadata: { billId: "b-nov" } }),
-            cardTx({ id: "out-30-estimada", amount: 30, date: "2026-10-30T12:00:00Z" }),
             cardTx({ id: "pag-out", amount: -500, operationType: "PAGAMENTO_FATURA", date: "2026-10-28T12:00:00Z" }),
             cardTx({ id: "nov-27", amount: 40, date: "2026-11-27T12:00:00Z" }),
           ],
@@ -201,10 +200,49 @@ describe("cartão", () => {
     );
     const refs = new Map(plan.inserts.map((t) => [t.id, t.invoice_ref]));
     expect(refs.get(pluggyTxId(HH, "out-28-banco"))).toBe("2026-11");
-    expect(refs.get(pluggyTxId(HH, "out-30-estimada"))).toBe("2026-11");
     expect(refs.get(pluggyTxId(HH, "nov-27"))).toBe("2026-12"); // 26/11 em diante: dezembro
     expect(refs.has(pluggyTxId(HH, "out-20"))).toBe(false); // fatura de outubro: já estava no sistema
     expect(refs.has(pluggyTxId(HH, "pag-out"))).toBe(false); // pagamento de antes do corte
+
+    // Enquanto o banco não fechou novembro, a compra do fim de outubro sem fatura é estimada nela.
+    const aberta = planPluggySync(
+      input([
+        cardData(
+          [cardTx({ id: "out-30-estimada", amount: 30, date: "2026-10-30T12:00:00Z", status: "PENDING" })],
+          [{ id: "b-out", dueDate: "2026-11-03T00:00:00Z", billClosingDate: "2026-10-25T00:00:00Z" }],
+        ),
+      ]),
+    );
+    expect(aberta.inserts[0]?.invoice_ref).toBe("2026-11");
+  });
+
+  it("fechamento pelo banco: sem fatura do banco nunca cai numa fatura já fechada", () => {
+    // O banco fechou novembro em 26/11 (fatura que vence 03/12). Compras de 25 e 26/11 ainda
+    // pendentes, sem fatura: vão para dezembro, não para novembro.
+    const bills = [
+      { id: "b-out", dueDate: "2026-11-03T00:00:00Z", billClosingDate: "2026-10-27T00:00:00Z" },
+      { id: "b-nov", dueDate: "2026-12-03T00:00:00Z", billClosingDate: "2026-11-26T00:00:00Z" },
+    ];
+    const plan = planPluggySync(
+      input([
+        cardData(
+          [
+            cardTx({ id: "na-fatura", amount: 50, date: "2026-11-26T10:00:00Z", creditCardMetadata: { billId: "b-nov" } }),
+            cardTx({ id: "pend-25", amount: 62, date: "2026-11-25T10:00:00Z", status: "PENDING" }),
+            cardTx({ id: "pend-26", amount: 96.79, date: "2026-11-26T10:00:00Z", status: "PENDING" }),
+            cardTx({ id: "dez-28", amount: 10, date: "2026-11-28T10:00:00Z", status: "PENDING" }),
+          ],
+          bills,
+        ),
+      ]),
+    );
+    const refs = new Map(plan.inserts.map((t) => [t.id, t.invoice_ref]));
+    expect(refs.get(pluggyTxId(HH, "na-fatura"))).toBe("2026-11");
+    expect(refs.get(pluggyTxId(HH, "pend-25"))).toBe("2026-12");
+    expect(refs.get(pluggyTxId(HH, "pend-26"))).toBe("2026-12");
+    expect(refs.get(pluggyTxId(HH, "dez-28"))).toBe("2026-12");
+    // Melhor dia aprendido: dia seguinte ao último fechamento (26/11 → 27).
+    expect(plan.cardClosingDays).toEqual([{ accountId: CARTAO, closingDay: 27 }]);
   });
 
   it("parcelas da mesma compra no mesmo grupo; estorno vira receita", () => {

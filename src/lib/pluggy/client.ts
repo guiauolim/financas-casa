@@ -101,6 +101,7 @@ export const transactionSchema = z.object({
 export const billSchema = z.object({
   id: z.string(),
   dueDate: z.string(),
+  billClosingDate: nullish(z.string()), // dia em que o banco fechou a fatura
   totalAmount: nullish(z.number()),
 });
 

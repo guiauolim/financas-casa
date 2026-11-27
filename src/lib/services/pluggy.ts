@@ -47,7 +47,11 @@ export async function discoverPluggySources(client: PluggyClient): Promise<Plugg
             client.listBills(account.id),
           ]);
           activity = transactions.filter((t) => t.date.slice(0, 10) >= PLUGGY_START_DATE).length;
-          suggestedClosingDay = suggestClosingDay(transactions, bills);
+          // Pelo fechamento que o banco informa; sem ele, pelas datas das compras de cada fatura.
+          const last = [...bills].sort((a, b) => a.dueDate.localeCompare(b.dueDate)).at(-1);
+          suggestedClosingDay = last?.billClosingDate
+            ? Number(addDays(last.billClosingDate.slice(0, 10), 1).slice(8, 10))
+            : suggestClosingDay(transactions, bills);
         }
         sources.push({
           key: sourceKey(kind, account.id),

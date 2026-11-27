@@ -143,7 +143,9 @@ docs/ROADMAP.md
   lançamentos não-Pluggy do cartão com `invoice_ref` ≥ essa fatura.
 - `external_transactions` = dedup da sincronização (como o `import_hash`); lançamento excluído pelo
   usuário não volta. Fatura: a do banco (`billId` → vencimento → `invoiceByDueMonth`) quando fechada;
-  aberta = estimativa pelo melhor dia, corrigida quando o banco fecha.
+  aberta = estimativa pelo melhor dia, corrigida quando o banco fecha. **O fechamento vem do banco**
+  (`bill.billClosingDate`): a sync grava no cartão o melhor dia = dia seguinte ao último fechamento
+  (`learnedCycle`), e o que ainda não tem fatura do banco nunca cai numa fatura já fechada (vai para a seguinte).
 - Sincronização (`services/pluggy-sync.ts` → plano puro `importers/pluggy/plan.ts`): corrente do cofre:
   saída = despesa, entrada = receita (salário/rendimento reconhecidos); aplicação/resgate, pix entre CPFs
   da casa (CPFs só em memória) e débito de fatura → absorvidos. Cartão: compra/encargo = despesa,
