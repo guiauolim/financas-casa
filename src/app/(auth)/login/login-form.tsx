@@ -4,6 +4,7 @@ import { MailCheck } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useActionState, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { PasswordInput } from "@/components/password-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type LoginState, sendMagicLink, signInWithPassword } from "./actions";
@@ -52,10 +53,9 @@ function PasswordLogin({ onUseLink, linkError }: { onUseLink: () => void; linkEr
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="password">Senha</Label>
-        <Input
+        <PasswordInput
           id="password"
           name="password"
-          type="password"
           autoComplete="current-password"
           required
           aria-invalid={Boolean(error) || undefined}
