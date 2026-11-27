@@ -255,6 +255,7 @@ docs/ROADMAP.md
 - Migrations novas em `supabase/migrations/NNNN_nome.sql`; aplicar com `pnpm supabase db push --remote`
   (conferir antes com `--remote --dry-run`) e depois `pnpm db:types`. Nunca editar uma migration já aplicada.
   CLI 3: sem `--remote` o `db push`/`migration list` miram o banco **local** (não temos: só dá erro de conexão).
+  Em produção a CLI pede confirmação; num agente ela recusa e pede `--yes`, que só se usa com o OK do usuário.
 - O banco é aplicado antes do deploy: toda migration em `migrations/` tem que ser compatível com o
   código que está em produção. O que quebra o código antigo (remover coluna etc.) fica em
   `supabase/pending/` e só entra depois do merge e do deploy.
