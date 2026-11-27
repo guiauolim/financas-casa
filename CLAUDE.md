@@ -165,6 +165,8 @@ docs/ROADMAP.md
 - Cursor da `/v2/transactions`: `next` é o resto do caminho (`/v2/transactions{next}`), não o valor do cursor.
 - Compra internacional: `amount` vem na moeda original (ex.: USD); o valor em reais é
   `amountInAccountCurrency`. Sempre usar `brlCents(tx)` (`importers/pluggy/plan.ts`).
+- De quem é (Pluggy): o dono do login ("De quem é este login" em Configurações → Bancos); no cartão, o
+  dono do final (`card_holders`). Vale para todas as categorias (as "da casa" não viram Casa aqui).
 - Dados reais: nada de log de conteúdo; testes e fixtures só com dados inventados.
 
 ## Tela Transações (o mês manda em tudo)

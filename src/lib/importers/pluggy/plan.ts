@@ -2,7 +2,7 @@ import { addMonthsToRef, type CardCycle, invoiceByDueMonth, invoiceFor, paymentI
 import { categorize, findCategoryByName, type MerchantRule } from "@/lib/finance/categorize";
 import { addDays, addMonthsToDate } from "@/lib/finance/dates";
 import type { PluggyRole, PluggySourceKind } from "@/lib/finance/pluggy-links";
-import { defaultSpentBy, type SpentBy } from "@/lib/finance/spent-by";
+import type { SpentBy } from "@/lib/finance/spent-by";
 import { keyDescription, type PlanCategory, uuidFromKey } from "@/lib/importers/card-statement/plan";
 import type { PluggyBill, PluggyInvestment, PluggyTransaction } from "@/lib/pluggy/client";
 
@@ -19,6 +19,8 @@ import type { PluggyBill, PluggyInvestment, PluggyTransaction } from "@/lib/plug
 // - Cartão: compra/encargo → despesa; estorno/crédito → receita; pagamento → transferência
 //   (conta pagadora → cartão), conciliada com um "Pagar fatura" já lançado quando houver (opção A).
 // - Fatura: a do banco (billId → vencimento) quando fechada; senão a estimada pelo melhor dia.
+// - De quem é: o dono do login (Itaú/Nubank de cada um); no cartão, o dono do final. Vale para
+//   todas as categorias (as "da casa" não viram Casa aqui) — a pessoa pode trocar à mão depois.
 // - Lançamento excluído pelo usuário não volta; categoria e pessoa editadas não são sobrescritas.
 
 const toCents = (value: number) => Math.round(value * 100);
@@ -341,10 +343,7 @@ export function planPluggySync(input: SyncInput): SyncPlan {
               installment_group_id: null,
               installment_number: null,
               installment_total: null,
-              spent_by: defaultSpentBy({
-                categoryHouseholdDefault: categoryId ? byId.get(categoryId)?.householdDefault : false,
-                personUserId: link.ownerUserId,
-              }),
+              spent_by: link.ownerUserId, // dono do login (null = Casa)
               card_last_digits: null,
               invoice_ref: null,
             },
@@ -461,10 +460,8 @@ export function planPluggySync(input: SyncInput): SyncPlan {
                 : null,
               installment_number: number,
               installment_total: total,
-              spent_by: defaultSpentBy({
-                categoryHouseholdDefault: categoryId ? byId.get(categoryId)?.householdDefault : false,
-                personUserId: (last4 ? card.holders.get(last4) : undefined) ?? link.ownerUserId,
-              }),
+              // Dono do final do cartão (titular/adicional); senão o dono do login.
+              spent_by: (last4 ? card.holders.get(last4) : undefined) ?? link.ownerUserId,
               card_last_digits: last4,
               invoice_ref: invoiceRef,
             },
