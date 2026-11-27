@@ -43,7 +43,7 @@ export type PlannedLine = {
   holderName: string | null;
   installment: { number: number; total: number; groupId: string } | null;
   categoryId: string | null;
-  categoryVia: "rule" | "keyword" | "alias" | "fallback" | "fee" | "user" | null;
+  categoryVia: "rule" | "history" | "keyword" | "alias" | "fallback" | "fee" | "user" | null;
   isOther: boolean; // caiu em "Outros" (revisar)
   pattern: string; // trecho para "lembrar para próximas"
   spentBy: SpentBy;

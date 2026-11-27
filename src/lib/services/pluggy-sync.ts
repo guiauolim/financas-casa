@@ -1,6 +1,7 @@
 import "server-only";
 import { addDays, todayInSaoPaulo } from "@/lib/finance/dates";
 import { cardPaymentAccount } from "@/lib/finance/payment-account";
+import { type HistoryEntry, learnCategoryHistory } from "@/lib/finance/categorize";
 import { PLUGGY_START_DATE } from "@/lib/finance/pluggy-links";
 import type { PlanCategory } from "@/lib/importers/card-statement/plan";
 import {
@@ -139,7 +140,7 @@ export async function syncPluggy(
   );
 
   // Lançamentos ligados (para atualizar) e "Pagar fatura" ainda sem ligação (para conciliar).
-  const TX_COLUMNS = "id, source, type, amount_cents, occurred_on, account_id, transfer_account_id, invoice_ref";
+  const TX_COLUMNS = "id, source, type, amount_cents, occurred_on, account_id, transfer_account_id, invoice_ref, category_id";
   type TxRow = {
     id: string;
     source: string;
@@ -149,6 +150,7 @@ export async function syncPluggy(
     account_id: string;
     transfer_account_id: string | null;
     invoice_ref: string | null;
+    category_id: string | null;
   };
   const toTx = (r: TxRow): ExistingTx => ({
     id: r.id,
@@ -159,6 +161,7 @@ export async function syncPluggy(
     accountId: r.account_id,
     transferAccountId: r.transfer_account_id,
     invoiceRef: r.invoice_ref,
+    categoryId: r.category_id,
   });
   const linkedIds = [...existing.values()].map((e) => e.transactionId).filter((id): id is string => Boolean(id));
   const existingTx = new Map<string, ExistingTx>();
@@ -192,6 +195,26 @@ export async function syncPluggy(
     ownerUserId: l.ownerUserId,
   }));
 
+  // Histórico de categorias da casa (todas as origens): o que a casa deu por último a cada comércio.
+  const historyRows: HistoryEntry[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data: rows, error } = await db
+      .from("transactions")
+      .select("description, category_id, type, updated_at")
+      .eq("household_id", householdId)
+      .neq("type", "transfer")
+      .not("category_id", "is", null)
+      .not("description", "is", null)
+      .order("id")
+      .range(from, from + 999);
+    throwIf(error);
+    historyRows.push(
+      ...(rows ?? []).map((r) => ({ description: r.description, categoryId: r.category_id, type: r.type, updatedAt: r.updated_at })),
+    );
+    if (!rows || rows.length < 1000) break;
+  }
+  const history = learnCategoryHistory(historyRows, categoryList);
+
   const plan = planPluggySync({
     householdId,
     startDate: PLUGGY_START_DATE,
@@ -201,6 +224,7 @@ export async function syncPluggy(
     cards,
     categories,
     rules: rules.map((r) => ({ pattern: r.pattern, categoryId: r.categoryId })),
+    history,
     householdDocs,
     institutions,
     existing,

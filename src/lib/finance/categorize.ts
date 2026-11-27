@@ -17,8 +17,45 @@ export type MerchantRule = { pattern: string; categoryId: string };
 
 export type Categorization = {
   categoryId: string | null;
-  via: "rule" | "keyword" | "alias" | "fallback";
+  via: "rule" | "history" | "keyword" | "alias" | "fallback";
 };
+
+// Histórico: a categoria que a casa deu por último a cada comércio/descrição (por tipo).
+// Chave = `${type}|${merchantPattern(descrição)}`. Lançamentos em "Outros"/"Outras receitas" não
+// ensinam nada; o mais recente vence (uma correção feita à mão passa a valer dali em diante).
+export type CategoryHistory = ReadonlyMap<string, string>;
+
+export type HistoryEntry = {
+  description: string | null;
+  categoryId: string | null;
+  type: "expense" | "income" | "transfer";
+  updatedAt: string;
+};
+
+export const historyKey = (type: "expense" | "income", description: string) => `${type}|${merchantPattern(description)}`;
+
+export function learnCategoryHistory(
+  entries: readonly HistoryEntry[],
+  categories: readonly CategorizeCategory[],
+): Map<string, string> {
+  const fallback = new Set(
+    [findCategoryByName(categories, FALLBACK_CATEGORY), findCategoryByName(categories, "Outras receitas")]
+      .filter(Boolean)
+      .map((c) => c!.id),
+  );
+  const valid = new Map(categories.filter((c) => !c.archived).map((c) => [c.id, c.type]));
+  const latest = new Map<string, { categoryId: string; updatedAt: string }>();
+  for (const e of entries) {
+    if (e.type === "transfer" || !e.description || !e.categoryId || fallback.has(e.categoryId)) continue;
+    if (valid.get(e.categoryId) !== e.type) continue;
+    const merchant = merchantPattern(e.description);
+    if (merchant.length < 3) continue;
+    const key = `${e.type}|${merchant}`;
+    const current = latest.get(key);
+    if (!current || current.updatedAt < e.updatedAt) latest.set(key, { categoryId: e.categoryId, updatedAt: e.updatedAt });
+  }
+  return new Map([...latest].map(([key, v]) => [key, v.categoryId]));
+}
 
 const stripAccents = (value: string) => value.normalize("NFD").replace(/\p{M}/gu, "");
 
@@ -117,8 +154,14 @@ export function categorize(
   {
     categories,
     rules = [],
+    history,
     type = "expense",
-  }: { categories: readonly CategorizeCategory[]; rules?: readonly MerchantRule[]; type?: "expense" | "income" },
+  }: {
+    categories: readonly CategorizeCategory[];
+    rules?: readonly MerchantRule[];
+    history?: CategoryHistory;
+    type?: "expense" | "income";
+  },
 ): Categorization {
   const usable = categories.filter((c) => c.type === type && !c.archived);
   const usableIds = new Set(usable.map((c) => c.id));
@@ -131,6 +174,10 @@ export function categorize(
     .filter((r) => merchant.includes(normalizeMerchant(r.pattern) || r.pattern))
     .sort((a, b) => b.pattern.length - a.pattern.length)[0];
   if (rule) return { categoryId: rule.categoryId, via: "rule" };
+
+  // 1b. Histórico da casa: a categoria dada por último a este comércio/descrição.
+  const learned = history?.get(historyKey(type, description));
+  if (learned && usableIds.has(learned)) return { categoryId: learned, via: "history" };
 
   // 2. Palavras-chave padrão (procura no comércio normalizado e na descrição crua).
   if (type === "expense") {

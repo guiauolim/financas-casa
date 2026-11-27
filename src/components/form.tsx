@@ -1,6 +1,7 @@
 "use client";
 
 import type { ComponentProps, ReactNode } from "react";
+import { PasswordInput } from "@/components/password-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -36,10 +37,12 @@ export function Field({
   ...inputProps
 }: { name: string; label: string; error?: string; hint?: ReactNode } & ComponentProps<"input">) {
   const id = idProp ?? name;
+  // type="password" ganha o botão de olho (mostrar/esconder).
+  const Control = inputProps.type === "password" ? PasswordInput : Input;
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       <Label htmlFor={id}>{label}</Label>
-      <Input
+      <Control
         id={id}
         name={name}
         aria-invalid={Boolean(error) || undefined}

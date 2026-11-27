@@ -218,7 +218,9 @@ docs/ROADMAP.md
   precisa ser lançado. Pagamentos lançados para ela são absorvidos (não viram crédito).
 - A entrada da importação fica em Novo lançamento (botão "Importar fatura").
 - Classificação (`lib/finance/categorize.ts`): regras aprendidas (`merchant_rules`, "lembrar para
-  próximas" na prévia, editáveis em Configurações → Regras) > palavras-chave padrão > apelidos > "Outros".
+  próximas" na prévia, editáveis em Configurações → Regras) > **histórico** (a categoria dada por último ao
+  mesmo comércio, despesa ou receita, `learnCategoryHistory`; Outros não ensina) > palavras-chave padrão >
+  apelidos > "Outros". A sync da Pluggy usa o histórico e reclassifica o que ficou em Outros/Outras receitas.
 - Confirmar grava tudo numa transação (RPC `apply_card_import`, security invoker, `source='import'`).
   O cliente só manda decisões; o servidor reprocessa o arquivo (sha256 confere) e refaz o plano.
 - Privacidade: igual à B3 (só em memória, sem log, até 4 MB no total). `*.xls`, `*.xlsx`, `*.csv`,
